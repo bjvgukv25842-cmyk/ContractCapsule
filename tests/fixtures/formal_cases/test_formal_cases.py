@@ -208,7 +208,7 @@ def test_formal_case_has_the_declared_fail_closed_outcome(case_path: Path) -> No
         assert executed.receipt.active_capsule == executed.candidate.reference
     else:
         assert executed.receipt.active_capsule == executed.old.reference
-        assert expected_blocker in executed.receipt.blockers
+        assert executed.receipt.blockers == (expected_blocker,)
 
 
 def test_valid_replacement_closes_dependencies_and_preserves_exact_evidence() -> None:
@@ -317,3 +317,274 @@ def test_capsule_core_is_immutable() -> None:
 
     with pytest.raises(FrozenInstanceError):
         executed.candidate.manifest = executed.old.manifest  # type: ignore[misc]
+
+
+def test_stripped_view_metadata_fails_closed() -> None:
+    executed = _execute(_load_case(CASES_DIR / "valid_replacement.json"))
+    stripped_view = replace(
+        executed.view,
+        content="",
+        selected_atom_ids=frozenset(),
+        exact_atom_ids=frozenset(),
+        evidence_handles=frozenset(),
+        ranked_capsules=(),
+    )
+    principal = Principal(executed.data["principal"])
+    validation = validate_view(stripped_view, (executed.candidate,), principal)
+    receipt = activate(
+        ActivationCandidate(
+            old=executed.old,
+            new=executed.candidate,
+            view=stripped_view,
+            validation=validation,
+            replacement=executed.decision,
+        ),
+        SafeBoundary(before_next_action=True),
+    )
+
+    assert not validation.valid
+    assert not receipt.activated
+    assert receipt.active_capsule == executed.old.reference
+    assert BlockerCode.VIEW_INCONSISTENT in receipt.blockers
+
+
+def test_activation_rejects_a_view_compiled_for_no_candidate() -> None:
+    executed = _execute(_load_case(CASES_DIR / "valid_replacement.json"))
+    principal = Principal(executed.data["principal"])
+    task = _task(executed.data["task"])
+    unrelated_view = compile_view(
+        (), task, principal, Budget(executed.data["budget"]), "test-adapter"
+    )
+    unrelated_validation = validate_view(unrelated_view, (), principal)
+    receipt = activate(
+        ActivationCandidate(
+            old=executed.old,
+            new=executed.candidate,
+            view=unrelated_view,
+            validation=unrelated_validation,
+            replacement=executed.decision,
+        ),
+        SafeBoundary(before_next_action=True),
+    )
+
+    assert not receipt.activated
+    assert receipt.active_capsule == executed.old.reference
+    assert BlockerCode.CANDIDATE_MISMATCH in receipt.blockers
+
+
+def test_activation_rejects_validation_for_a_different_view() -> None:
+    executed = _execute(_load_case(CASES_DIR / "valid_replacement.json"))
+    modified_view = replace(executed.view, content="tampered")
+    receipt = activate(
+        ActivationCandidate(
+            old=executed.old,
+            new=executed.candidate,
+            view=modified_view,
+            validation=executed.validation,
+            replacement=executed.decision,
+        ),
+        SafeBoundary(before_next_action=True),
+    )
+
+    assert not receipt.activated
+    assert receipt.active_capsule == executed.old.reference
+    assert BlockerCode.VALIDATION_MISMATCH in receipt.blockers
+
+
+@pytest.mark.parametrize(
+    "case_name",
+    ["missing_mandatory_dependency.json", "unresolved_conflict.json"],
+)
+def test_validation_recomputes_graph_failures_from_capsules(
+    case_name: str,
+) -> None:
+    executed = _execute(_load_case(CASES_DIR / case_name))
+    cleared_view = replace(
+        executed.view,
+        blockers=(),
+        missing_dependencies=frozenset(),
+        conflicts=frozenset(),
+        dependency_closed=True,
+    )
+    principal = Principal(executed.data["principal"])
+    validation = validate_view(cleared_view, (executed.candidate,), principal)
+
+    assert not validation.valid
+    assert validation.reason is BlockerCode.VIEW_INCONSISTENT
+
+
+def test_activation_binds_the_decision_to_the_compiled_task() -> None:
+    executed = _execute(_load_case(CASES_DIR / "valid_replacement.json"))
+    principal = Principal(executed.data["principal"])
+    benign_task = _task(executed.data["task"])
+    irreversible_task = replace(
+        benign_task,
+        irreversible_external_action=True,
+        preflight_completed=False,
+        approval_granted=False,
+        compensation_available=False,
+    )
+    irreversible_view = compile_view(
+        (executed.candidate,),
+        irreversible_task,
+        principal,
+        Budget(executed.data["budget"]),
+        executed.data["adapter"],
+    )
+    irreversible_validation = validate_view(
+        irreversible_view, (executed.candidate,), principal
+    )
+    benign_decision = can_replace(
+        executed.old, executed.candidate, benign_task
+    )
+    receipt = activate(
+        ActivationCandidate(
+            old=executed.old,
+            new=executed.candidate,
+            view=irreversible_view,
+            validation=irreversible_validation,
+            replacement=benign_decision,
+        ),
+        SafeBoundary(before_next_action=True),
+    )
+
+    assert not receipt.activated
+    assert receipt.active_capsule == executed.old.reference
+    assert BlockerCode.TASK_MISMATCH in receipt.blockers
+
+
+def test_activation_binds_reports_to_the_candidate_core() -> None:
+    executed = _execute(_load_case(CASES_DIR / "valid_replacement.json"))
+    invalid_candidate = replace(
+        executed.candidate, integrity=IntegrityBundle(valid=False)
+    )
+    receipt = activate(
+        ActivationCandidate(
+            old=executed.old,
+            new=invalid_candidate,
+            view=executed.view,
+            validation=executed.validation,
+            replacement=executed.decision,
+        ),
+        SafeBoundary(before_next_action=True),
+    )
+
+    assert not receipt.activated
+    assert receipt.active_capsule == executed.old.reference
+    assert BlockerCode.CANDIDATE_MISMATCH in receipt.blockers
+
+
+def test_duplicate_atom_ids_fail_closed_before_budgeting() -> None:
+    executed = _execute(_load_case(CASES_DIR / "valid_replacement.json"))
+    first = next(atom for atom in executed.candidate.atoms if atom.is_p0)
+    duplicate = replace(
+        first,
+        statement="A different P0 statement using the same identifier.",
+        token_cost=6,
+    )
+    original = replace(first, token_cost=6)
+    candidate = replace(
+        executed.candidate,
+        atoms=frozenset(
+            {original, duplicate}
+            | {atom for atom in executed.candidate.atoms if not atom.is_p0}
+        ),
+    )
+    principal = Principal(executed.data["principal"])
+    task = _task(executed.data["task"])
+    view = compile_view((candidate,), task, principal, Budget(10), "test")
+    validation = validate_view(view, (candidate,), principal)
+    decision = can_replace(executed.old, candidate, task)
+    receipt = activate(
+        ActivationCandidate(
+            old=executed.old,
+            new=candidate,
+            view=view,
+            validation=validation,
+            replacement=decision,
+        ),
+        SafeBoundary(before_next_action=True),
+    )
+
+    assert not receipt.activated
+    assert receipt.active_capsule == executed.old.reference
+    assert BlockerCode.MALFORMED_CAPSULE in receipt.blockers
+
+
+def test_duplicate_evidence_ids_fail_closed() -> None:
+    executed = _execute(_load_case(CASES_DIR / "valid_replacement.json"))
+    first = next(iter(executed.candidate.evidence))
+    duplicate = replace(first, exact_text="Different source span, same ID.")
+    candidate = replace(
+        executed.candidate,
+        evidence=executed.candidate.evidence | frozenset({duplicate}),
+    )
+    principal = Principal(executed.data["principal"])
+    task = _task(executed.data["task"])
+    view = compile_view(
+        (candidate,), task, principal, Budget(executed.data["budget"]), "test"
+    )
+
+    assert BlockerCode.MALFORMED_CAPSULE in view.blockers
+
+
+def test_duplicate_atom_ids_across_compiled_capsules_fail_closed() -> None:
+    executed = _execute(_load_case(CASES_DIR / "valid_replacement.json"))
+    first = next(iter(executed.candidate.atoms))
+    conflicting = replace(first, statement="Conflicting statement for same ID.")
+    second = replace(
+        executed.candidate,
+        manifest=replace(
+            executed.candidate.manifest,
+            capsule_id="another-policy",
+            version="1",
+        ),
+        atoms=(executed.candidate.atoms - frozenset({first}))
+        | frozenset({conflicting}),
+    )
+    principal = Principal(executed.data["principal"])
+    task = _task(executed.data["task"])
+    view = compile_view(
+        (executed.candidate, second),
+        task,
+        principal,
+        Budget(executed.data["budget"] * 2),
+        "test",
+    )
+
+    assert BlockerCode.MALFORMED_CAPSULE in view.blockers
+
+
+def test_unknown_compression_class_is_malformed_and_fail_closed() -> None:
+    executed = _execute(_load_case(CASES_DIR / "valid_replacement.json"))
+    first = next(iter(executed.candidate.atoms))
+    unknown = replace(
+        first,
+        compression_class="P0_CRITICAL",
+        token_cost=10_000,
+        relevance=0,
+    )
+    candidate = replace(
+        executed.candidate,
+        atoms=(executed.candidate.atoms - frozenset({first}))
+        | frozenset({unknown}),
+    )
+    principal = Principal(executed.data["principal"])
+    task = _task(executed.data["task"])
+    view = compile_view((candidate,), task, principal, Budget(1), "test")
+    validation = validate_view(view, (candidate,), principal)
+    decision = can_replace(executed.old, candidate, task)
+    receipt = activate(
+        ActivationCandidate(
+            old=executed.old,
+            new=candidate,
+            view=view,
+            validation=validation,
+            replacement=decision,
+        ),
+        SafeBoundary(before_next_action=True),
+    )
+
+    assert not receipt.activated
+    assert receipt.active_capsule == executed.old.reference
+    assert BlockerCode.MALFORMED_CAPSULE in receipt.blockers

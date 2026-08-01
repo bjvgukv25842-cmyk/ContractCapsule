@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
+from hashlib import sha256
 
 
 class BlockerCode(StrEnum):
@@ -35,8 +36,23 @@ class BlockerCode(StrEnum):
     IRREVERSIBLE_SIDE_EFFECT_UNCONTROLLED = (
         "IRREVERSIBLE_SIDE_EFFECT_UNCONTROLLED"
     )
+    VIEW_INCONSISTENT = "VIEW_INCONSISTENT"
+    VALIDATION_MISMATCH = "VALIDATION_MISMATCH"
+    CANDIDATE_MISMATCH = "CANDIDATE_MISMATCH"
+    TASK_MISMATCH = "TASK_MISMATCH"
     UNSAFE_ACTIVATION_BOUNDARY = "UNSAFE_ACTIVATION_BOUNDARY"
     ACTIVATION_NOT_APPLIED = "ACTIVATION_NOT_APPLIED"
+
+
+ALLOWED_COMPRESSION_CLASSES = frozenset(
+    {
+        "P0_EXACT",
+        "P1_STRUCTURED",
+        "P2_EXCERPT",
+        "P3_SUMMARY",
+        "P4_TRANSIENT",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -150,9 +166,12 @@ class Capsule:
 @dataclass(frozen=True)
 class CompiledView:
     capsule_refs: tuple[str, ...]
+    capsule_fingerprints: tuple[tuple[str, str], ...]
     task_id: str
+    task_fingerprint: str
     principal_id: str
     adapter: str
+    budget_tokens: int
     content: str
     selected_atom_ids: frozenset[str]
     exact_atom_ids: frozenset[str]
@@ -171,6 +190,9 @@ class CompiledView:
 class ValidationReport:
     valid: bool
     blockers: tuple[BlockerCode, ...]
+    view_fingerprint: str
+    capsule_fingerprints: tuple[tuple[str, str], ...]
+    principal_id: str
 
     @property
     def reason(self) -> BlockerCode:
@@ -181,6 +203,10 @@ class ValidationReport:
 class ReplacementDecision:
     old_capsule: str
     new_capsule: str
+    old_fingerprint: str
+    new_fingerprint: str
+    task_id: str
+    task_fingerprint: str
     allowed: bool
     target_effect_realized: bool
     protected_invariants_preserved: bool
@@ -238,6 +264,132 @@ def _unique_blockers(*groups: Iterable[BlockerCode]) -> tuple[BlockerCode, ...]:
     return tuple(result)
 
 
+def _digest(value: object) -> str:
+    return sha256(repr(value).encode("utf-8")).hexdigest()
+
+
+def _task_fingerprint(task: TaskContext) -> str:
+    return _digest(
+        (
+            task.task_id,
+            task.repository,
+            task.path,
+            task.environment,
+            tuple(sorted(task.required_interfaces)),
+            task.irreversible_external_action,
+            task.preflight_completed,
+            task.approval_granted,
+            task.compensation_available,
+        )
+    )
+
+
+def _capsule_fingerprint(capsule: Capsule) -> str:
+    manifest = capsule.manifest
+    contract = capsule.replacement_contract
+    return _digest(
+        (
+            (
+                manifest.capsule_id,
+                manifest.version,
+                tuple(sorted(manifest.authorized_principals)),
+                tuple(sorted(manifest.repositories)),
+                manifest.path_prefixes,
+                tuple(sorted(manifest.environments)),
+                tuple(sorted(manifest.provides)),
+                manifest.lifecycle,
+            ),
+            tuple(
+                sorted(
+                    (
+                        atom.atom_id,
+                        atom.statement,
+                        atom.compression_class,
+                        atom.token_cost,
+                        atom.relevance,
+                        tuple(sorted(atom.evidence_refs)),
+                    )
+                    for atom in capsule.atoms
+                )
+            ),
+            tuple(
+                sorted(
+                    (
+                        evidence.evidence_id,
+                        evidence.digest,
+                        evidence.exact_text,
+                        evidence.fresh,
+                    )
+                    for evidence in capsule.evidence
+                )
+            ),
+            tuple(sorted(capsule.dependency_graph.requires)),
+            tuple(sorted(capsule.dependency_graph.conflicts)),
+            (
+                contract.replaces,
+                tuple(sorted(contract.accepts_interfaces)),
+                contract.target_effects_passed,
+                contract.protected_invariants_passed,
+                contract.forbidden_spillover_detected,
+            ),
+            capsule.compression_policy.p0_exact,
+            capsule.integrity.valid,
+        )
+    )
+
+
+def _view_fingerprint(view: CompiledView) -> str:
+    return _digest(
+        (
+            view.capsule_refs,
+            view.capsule_fingerprints,
+            view.task_id,
+            view.task_fingerprint,
+            view.principal_id,
+            view.adapter,
+            view.budget_tokens,
+            view.content,
+            tuple(sorted(view.selected_atom_ids)),
+            tuple(sorted(view.exact_atom_ids)),
+            tuple(sorted(view.evidence_handles)),
+            view.eligibility_checked,
+            view.ranked_capsules,
+            view.audit_phases,
+            tuple(sorted(view.missing_dependencies)),
+            tuple(sorted(view.conflicts)),
+            view.dependency_closed,
+            view.p0_preserved,
+            tuple(view.blockers),
+        )
+    )
+
+
+def _cross_capsule_identity_blockers(
+    capsules: Iterable[Capsule],
+) -> tuple[BlockerCode, ...]:
+    atoms: dict[str, Atom] = {}
+    evidence_items: dict[str, Evidence] = {}
+    references: dict[str, str] = {}
+    for capsule in capsules:
+        fingerprint = _capsule_fingerprint(capsule)
+        previous_fingerprint = references.setdefault(
+            capsule.reference, fingerprint
+        )
+        if previous_fingerprint != fingerprint:
+            return (BlockerCode.MALFORMED_CAPSULE,)
+        for atom in capsule.atoms:
+            previous_atom = atoms.setdefault(atom.atom_id, atom)
+            if previous_atom != atom:
+                return (BlockerCode.MALFORMED_CAPSULE,)
+        for evidence in capsule.evidence:
+            previous_evidence = evidence_items.setdefault(
+                evidence.evidence_id, evidence
+            )
+            if previous_evidence != evidence:
+                return (BlockerCode.MALFORMED_CAPSULE,)
+    return ()
+
+
 def _well_formedness(capsule: Capsule) -> tuple[BlockerCode, ...]:
     blockers: list[BlockerCode] = []
     manifest = capsule.manifest
@@ -253,6 +405,13 @@ def _well_formedness(capsule: Capsule) -> tuple[BlockerCode, ...]:
     if not capsule.integrity.valid:
         blockers.append(BlockerCode.INTEGRITY_FAILED)
 
+    evidence_ids = [evidence.evidence_id for evidence in capsule.evidence]
+    atom_ids = [atom.atom_id for atom in capsule.atoms]
+    if len(evidence_ids) != len(set(evidence_ids)):
+        blockers.append(BlockerCode.MALFORMED_CAPSULE)
+    if len(atom_ids) != len(set(atom_ids)):
+        blockers.append(BlockerCode.MALFORMED_CAPSULE)
+
     evidence_by_id = {
         evidence.evidence_id: evidence for evidence in capsule.evidence
     }
@@ -265,6 +424,7 @@ def _well_formedness(capsule: Capsule) -> tuple[BlockerCode, ...]:
             or not atom.statement
             or atom.token_cost < 0
             or not atom.evidence_refs
+            or atom.compression_class not in ALLOWED_COMPRESSION_CLASSES
         ):
             blockers.append(BlockerCode.MALFORMED_CAPSULE)
         if not atom.evidence_refs.issubset(evidence_by_id):
@@ -333,7 +493,8 @@ def compile_view(
 
     supplied = tuple(capsules)
     eligibility_checked = tuple(capsule.reference for capsule in supplied)
-    blockers: list[BlockerCode] = []
+    global_blockers = _cross_capsule_identity_blockers(supplied)
+    blockers: list[BlockerCode] = list(global_blockers)
     eligible: list[Capsule] = []
 
     for capsule in supplied:
@@ -343,6 +504,9 @@ def compile_view(
         blockers.extend(eligibility_blockers)
         if not structural_blockers and not eligibility_blockers:
             eligible.append(capsule)
+
+    if global_blockers:
+        eligible = []
 
     audit_phases: tuple[str, ...] = ("eligibility",)
     ranked: tuple[Capsule, ...] = ()
@@ -419,7 +583,6 @@ def compile_view(
     p0_preserved = (
         p0_atom_ids.issubset(exact_atom_ids)
         and policies_are_exact
-        and p0_cost <= budget.tokens
     )
     dependency_closed = not missing_dependencies and all(
         source not in selected or dependency in selected
@@ -428,9 +591,15 @@ def compile_view(
 
     return CompiledView(
         capsule_refs=tuple(capsule.reference for capsule in supplied),
+        capsule_fingerprints=tuple(
+            (capsule.reference, _capsule_fingerprint(capsule))
+            for capsule in supplied
+        ),
         task_id=task.task_id,
+        task_fingerprint=_task_fingerprint(task),
         principal_id=principal.principal_id,
         adapter=adapter,
+        budget_tokens=budget.tokens,
         content=content,
         selected_atom_ids=frozenset(selected),
         exact_atom_ids=exact_atom_ids,
@@ -451,54 +620,152 @@ def validate_view(
     capsules: Iterable[Capsule],
     principal: Principal,
 ) -> ValidationReport:
-    """Validate traceability, exact P0, closure, conflicts, and authorization."""
+    """Recompute view invariants instead of trusting compiler metadata."""
 
     supplied = tuple(capsules)
     blockers: list[BlockerCode] = list(view.blockers)
+    consistency_failed = False
+    supplied_refs = tuple(capsule.reference for capsule in supplied)
+    supplied_fingerprints = tuple(
+        (capsule.reference, _capsule_fingerprint(capsule))
+        for capsule in supplied
+    )
+
+    if (
+        view.capsule_refs != supplied_refs
+        or view.capsule_fingerprints != supplied_fingerprints
+        or view.eligibility_checked != supplied_refs
+    ):
+        consistency_failed = True
     if view.principal_id != principal.principal_id:
         blockers.append(BlockerCode.UNAUTHORIZED_CAPSULE)
 
+    blockers.extend(_cross_capsule_identity_blockers(supplied))
     for capsule in supplied:
         blockers.extend(_well_formedness(capsule))
         if principal.principal_id not in capsule.manifest.authorized_principals:
             blockers.append(BlockerCode.UNAUTHORIZED_CAPSULE)
+        if any(not evidence.fresh for evidence in capsule.evidence):
+            blockers.append(BlockerCode.STALE_EVIDENCE)
 
-    ranked_refs = set(view.ranked_capsules)
+    capsule_by_ref = {capsule.reference: capsule for capsule in supplied}
+    if (
+        len(view.ranked_capsules) != len(set(view.ranked_capsules))
+        or any(reference not in capsule_by_ref for reference in view.ranked_capsules)
+    ):
+        consistency_failed = True
     ranked = tuple(
-        capsule for capsule in supplied if capsule.reference in ranked_refs
+        capsule_by_ref[reference]
+        for reference in view.ranked_capsules
+        if reference in capsule_by_ref
     )
+    expected_ranked = tuple(
+        sorted(
+            ranked,
+            key=lambda capsule: (
+                -sum(atom.relevance for atom in capsule.atoms),
+                capsule.reference,
+            ),
+        )
+    )
+    if view.ranked_capsules != tuple(
+        capsule.reference for capsule in expected_ranked
+    ):
+        consistency_failed = True
+    expected_phases = ("eligibility",) + (("ranking",) if ranked else ())
+    if view.audit_phases != expected_phases:
+        consistency_failed = True
+    if supplied and not ranked and not view.blockers:
+        consistency_failed = True
+
     atom_by_id = _atom_index(ranked)
-    evidence_ids = {
-        evidence.evidence_id for capsule in ranked for evidence in capsule.evidence
+    selected = {
+        atom.atom_id
+        for capsule in ranked
+        for atom in capsule.atoms
+        if atom.is_p0 or atom.relevance > 0
     }
-    selected_atoms = tuple(
-        atom_by_id[atom_id]
-        for atom_id in view.selected_atom_ids
-        if atom_id in atom_by_id
+    requires = frozenset(
+        edge for capsule in ranked for edge in capsule.dependency_graph.requires
     )
-    if len(selected_atoms) != len(view.selected_atom_ids):
-        blockers.append(BlockerCode.MALFORMED_CAPSULE)
-    required_evidence = {
+    selected, missing_dependencies = _dependency_closure(
+        selected, atom_by_id, requires
+    )
+    declared_conflicts = frozenset(
+        edge for capsule in ranked for edge in capsule.dependency_graph.conflicts
+    )
+    conflicts = frozenset(
+        (left, right)
+        for left, right in declared_conflicts
+        if left in selected and right in selected
+    )
+    selected_atoms = tuple(
+        sorted(
+            (atom_by_id[atom_id] for atom_id in selected if atom_id in atom_by_id),
+            key=lambda atom: (not atom.is_p0, -atom.relevance, atom.atom_id),
+        )
+    )
+    exact_atom_ids = frozenset(
+        atom.atom_id for atom in selected_atoms if atom.is_p0
+    )
+    required_evidence = frozenset(
         evidence_ref
         for atom in selected_atoms
         for evidence_ref in atom.evidence_refs
+    )
+    evidence_ids = {
+        evidence.evidence_id for capsule in ranked for evidence in capsule.evidence
     }
-    if (
-        not required_evidence.issubset(evidence_ids)
-        or not required_evidence.issubset(view.evidence_handles)
-    ):
-        blockers.append(BlockerCode.MISSING_EVIDENCE)
+    p0_ids = frozenset(
+        atom.atom_id for atom in atom_by_id.values() if atom.is_p0
+    )
+    policies_are_exact = all(
+        capsule.compression_policy.p0_exact for capsule in ranked
+    )
+    p0_preserved = p0_ids.issubset(exact_atom_ids) and policies_are_exact
+    dependency_closed = not missing_dependencies and all(
+        source not in selected or dependency in selected
+        for source, dependency in requires
+    )
 
-    p0_ids = {atom.atom_id for atom in atom_by_id.values() if atom.is_p0}
-    if not p0_ids.issubset(view.exact_atom_ids) or not view.p0_preserved:
+    if (
+        view.selected_atom_ids != frozenset(selected)
+        or view.exact_atom_ids != exact_atom_ids
+        or view.evidence_handles != required_evidence
+        or view.content != "\n".join(atom.statement for atom in selected_atoms)
+        or view.missing_dependencies != frozenset(missing_dependencies)
+        or view.conflicts != conflicts
+        or view.dependency_closed is not dependency_closed
+        or view.p0_preserved is not p0_preserved
+    ):
+        consistency_failed = True
+    if consistency_failed:
+        blockers.append(BlockerCode.VIEW_INCONSISTENT)
+
+    if not required_evidence.issubset(evidence_ids):
+        blockers.append(BlockerCode.MISSING_EVIDENCE)
+    if not p0_preserved:
         blockers.append(BlockerCode.P0_NOT_EXACT)
-    if not view.dependency_closed:
+    if missing_dependencies or not dependency_closed:
         blockers.append(BlockerCode.MISSING_MANDATORY_DEPENDENCY)
-    if view.conflicts:
+    if conflicts:
         blockers.append(BlockerCode.UNRESOLVED_CONFLICT)
 
+    p0_cost = sum(atom.token_cost for atom in atom_by_id.values() if atom.is_p0)
+    selected_cost = sum(atom.token_cost for atom in selected_atoms)
+    if p0_cost > view.budget_tokens:
+        blockers.append(BlockerCode.P0_BUDGET_OVERFLOW)
+    elif selected_cost > view.budget_tokens:
+        blockers.append(BlockerCode.MANDATORY_CLOSURE_BUDGET_OVERFLOW)
+
     unique = _unique_blockers(blockers)
-    return ValidationReport(valid=not unique, blockers=unique)
+    return ValidationReport(
+        valid=not unique,
+        blockers=unique,
+        view_fingerprint=_view_fingerprint(view),
+        capsule_fingerprints=supplied_fingerprints,
+        principal_id=principal.principal_id,
+    )
 
 
 def can_replace(
@@ -538,6 +805,10 @@ def can_replace(
     return ReplacementDecision(
         old_capsule=old.reference,
         new_capsule=new.reference,
+        old_fingerprint=_capsule_fingerprint(old),
+        new_fingerprint=_capsule_fingerprint(new),
+        task_id=task.task_id,
+        task_fingerprint=_task_fingerprint(task),
         allowed=not unique,
         target_effect_realized=contract.target_effects_passed,
         protected_invariants_preserved=contract.protected_invariants_passed,
@@ -555,8 +826,46 @@ def activate(
     boundary_blockers: tuple[BlockerCode, ...] = ()
     if not safe_boundary.before_next_action:
         boundary_blockers = (BlockerCode.UNSAFE_ACTIVATION_BOUNDARY,)
+    candidate_blockers: tuple[BlockerCode, ...] = ()
+    expected_new_identity = (
+        candidate.new.reference,
+        _capsule_fingerprint(candidate.new),
+    )
+    if (
+        expected_new_identity not in candidate.view.capsule_fingerprints
+        or candidate.replacement.old_capsule != candidate.old.reference
+        or candidate.replacement.new_capsule != candidate.new.reference
+        or candidate.replacement.old_fingerprint
+        != _capsule_fingerprint(candidate.old)
+        or candidate.replacement.new_fingerprint
+        != _capsule_fingerprint(candidate.new)
+    ):
+        candidate_blockers = (BlockerCode.CANDIDATE_MISMATCH,)
+
+    task_blockers: tuple[BlockerCode, ...] = ()
+    if (
+        candidate.replacement.task_id != candidate.view.task_id
+        or candidate.replacement.task_fingerprint
+        != candidate.view.task_fingerprint
+    ):
+        task_blockers = (BlockerCode.TASK_MISMATCH,)
+
+    validation_blockers: tuple[BlockerCode, ...] = ()
+    if (
+        candidate.validation.view_fingerprint
+        != _view_fingerprint(candidate.view)
+        or candidate.validation.capsule_fingerprints
+        != candidate.view.capsule_fingerprints
+        or candidate.validation.principal_id != candidate.view.principal_id
+        or candidate.validation.valid != (not candidate.validation.blockers)
+        or candidate.replacement.allowed != (not candidate.replacement.blockers)
+    ):
+        validation_blockers = (BlockerCode.VALIDATION_MISMATCH,)
     blockers = _unique_blockers(
         boundary_blockers,
+        candidate_blockers,
+        task_blockers,
+        validation_blockers,
         candidate.view.blockers,
         candidate.validation.blockers,
         candidate.replacement.blockers,
