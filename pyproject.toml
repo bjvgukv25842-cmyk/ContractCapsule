@@ -1,0 +1,29 @@
+[project]
+name = "contractcapsule"
+version = "0.1.0"
+description = "Research prototype for the frozen ContractCapsule CCS-2.1 specification"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "jsonschema>=4.26.0",
+    "networkx>=3.6.1",
+    "pydantic>=2.13.4",
+    "pyyaml>=6.0.3",
+    "typer>=0.27.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.164.0",
+    "mypy>=2.3.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.1",
+]
+
+[tool.ruff]
+target-version = "py312"
