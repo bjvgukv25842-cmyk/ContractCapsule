@@ -113,3 +113,38 @@
 - Message: `chore: bootstrap ContractCapsule FSE research project`.
 - Verification: commit exited 0 and contains the 20 reviewed M0 files.
 - Boundary: no upstream was set and no push was performed.
+
+## M0-012 - Human exit gate approved
+
+- Date: 2026-08-01
+- Status: approved; M0 closed
+- Decision: the author approved the FSE 2027 Research Papers target, both
+  frozen baseline digests, the M0 technical and audit outputs, the final
+  author/affiliation gate, the submission-conflict gate, and the current
+  ethics-scope gate.
+- Privacy boundary: tracked public research files record approval status only.
+  Names, affiliations, email addresses, contribution details, and any future
+  detailed conflict disclosures remain outside tracked public files.
+- Conflict status: the author reports no known submission conflicts.
+- Ethics scope: the current protocol evaluates coding agents and publicly
+  licensed repositories without collecting human-participant data. Author or
+  collaborator validation of task labels is not research-subject data.
+- Reopen condition: user studies, interviews, surveys, private developer data,
+  crowdsourced labeling, or identifiable telemetry reopen the ethics gate and
+  require review under the authors' institutional rules.
+- Verification: both frozen sources and normative copies remain byte-identical
+  with approved digests; the 4-test cumulative suite, Ruff, and uv lock checks
+  all exit 0; the tracked-file identity scan finds no supplied author details.
+- Boundary: approval closes M0 but does not waive M1's required execution
+  Skill, isolated workspace, TDD, G0, or any later human gate.
+
+## M0-013 - M1 execution preflight blocked
+
+- Date: 2026-08-01
+- Status: blocking before M1
+- Evidence: `superpowers:executing-plans` is absent from the current session's
+  registered Available Skills inventory.
+- Decision: cached or discoverable files are not treated as a registered Skill,
+  and the M0 manual-execution waiver is not extended to M1.
+- Consequence: no M1 branch, worktree, formal model, fixture, literature entry,
+  or implementation is created until the required Skill is actually available.

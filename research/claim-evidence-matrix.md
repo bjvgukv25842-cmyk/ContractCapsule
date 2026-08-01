@@ -1,6 +1,6 @@
 # Claim-Evidence Matrix
 
-Status: M0 governance foundation, 2026-08-01.
+Status: M0 governance foundation approved and closed, 2026-08-01.
 
 This matrix distinguishes evidence that exists now from evidence planned by the
 frozen execution plan. A path or planned test is not counted as an empirical
@@ -18,5 +18,7 @@ result.
 | RQ3 | Replacement correctness and safety | TER, PIP, and BSR remain separate in the protocol | No result | M5 mechanism and M8-M10 differential evidence |
 | RQ4 | Generality and component necessity | Cross-agent and ablation design retained | No result | M6 adapters and M9-M10 replication/ablations |
 
-Human validation status: pending at the M0 exit gate except for the confirmed
-target track and CCS-2.1 digest.
+Human validation status: the author approved the M0 technical artifacts,
+baseline digests, and governance exit gate on 2026-08-01. This approval does
+not validate future formal claims, benchmark truth, citations, experiments, or
+paper conclusions; those retain their module-specific human responsibilities.

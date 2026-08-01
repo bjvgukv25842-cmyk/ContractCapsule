@@ -1,7 +1,9 @@
 # ContractCapsule Research Protocol
 
-Status: M0 governance baseline, 2026-08-01. M1 will formalize and preregister
-the research questions and analysis protocol; this file does not preempt M1.
+Status: M0 governance baseline closed by human exit-gate approval on
+2026-08-01. M1 is authorized but has not started; it will formalize and
+preregister the research questions and analysis protocol. This file does not
+preempt M1.
 
 ## Normative Inputs
 
@@ -52,7 +54,8 @@ a failed component.
 
 - Modules execute strictly from M0 through M11, one authorized module at a
   time, with human approval at each exit gate.
-- The current authorization covers M0 only.
+- M0 is closed. M1 is authorized only after its required execution Skill and
+  isolated-workspace preconditions pass; M2-M11 remain unauthorized.
 - Tests precede behavioral implementation.
 - Valid unfavorable results and negative cases are retained.
 - Infrastructure retries never replace valid unfavorable runs.
@@ -81,7 +84,15 @@ normalized before the M11 anonymity freeze.
 |---|---|
 | Target track: FSE 2027 Research Papers | Confirmed by author, 2026-08-01 |
 | CCS-2.1 approved digest | Confirmed by author and local verification |
-| Final author names and affiliations | Pending |
-| Submission conflicts of interest | Pending |
-| Human-participant or other ethics review requirement | Pending |
-| Repository license and citation metadata | Pending |
+| Frozen execution-plan digest | Confirmed by author and local verification |
+| Final author names and affiliations | Confirmed by author; identity details retained outside tracked public files |
+| Submission conflicts of interest | Confirmed by author: no known submission conflicts |
+| Human-participant or other ethics review requirement | Confirmed for the current non-human-participant protocol |
+| Repository license and citation metadata | Not an M0 exit criterion; pending a later author decision |
+
+The current protocol evaluates coding agents and publicly licensed code
+repositories and does not collect human-participant data. Internal validation
+of task labels by authors or collaborators is not treated as research-subject
+data. Adding user studies, interviews, surveys, private developer data,
+crowdsourced labeling, or identifiable telemetry reopens the ethics gate and
+requires review under the authors' institutional rules.
