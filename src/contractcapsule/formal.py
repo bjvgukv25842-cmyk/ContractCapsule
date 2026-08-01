@@ -447,6 +447,8 @@ def _eligibility_blockers(
         or not any(task.path.startswith(prefix) for prefix in manifest.path_prefixes)
     ):
         blockers.append(BlockerCode.OUT_OF_SCOPE)
+    if not task.required_interfaces.issubset(manifest.provides):
+        blockers.append(BlockerCode.INCOMPATIBLE_INTERFACE)
     if any(not evidence.fresh for evidence in capsule.evidence):
         blockers.append(BlockerCode.STALE_EVIDENCE)
     return _unique_blockers(blockers)

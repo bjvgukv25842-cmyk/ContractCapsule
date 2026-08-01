@@ -243,6 +243,15 @@ def test_ineligible_capsule_is_never_ranked() -> None:
     assert executed.receipt.reason is BlockerCode.UNAUTHORIZED_CAPSULE
 
 
+def test_interface_incompatible_capsule_is_never_ranked() -> None:
+    executed = _execute(_load_case(CASES_DIR / "incompatible_interface.json"))
+
+    assert executed.candidate.reference in executed.view.eligibility_checked
+    assert executed.candidate.reference not in executed.view.ranked_capsules
+    assert executed.view.audit_phases == ("eligibility",)
+    assert executed.receipt.blockers == (BlockerCode.INCOMPATIBLE_INTERFACE,)
+
+
 def test_unresolved_conflict_is_visible_in_the_compiled_view() -> None:
     executed = _execute(_load_case(CASES_DIR / "unresolved_conflict.json"))
 
