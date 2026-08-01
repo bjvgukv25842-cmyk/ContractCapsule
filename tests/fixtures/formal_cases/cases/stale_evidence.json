@@ -1,0 +1,40 @@
+{
+  "name": "stale evidence",
+  "description": "A candidate whose source evidence is stale is rejected during eligibility before it can be ranked.",
+  "principal": "alice",
+  "adapter": "reference-agent/v1",
+  "budget": 10,
+  "safe_boundary": true,
+  "task": {
+    "task_id": "tighten-auth-token-lifetime",
+    "required_interfaces": ["auth/v2"],
+    "irreversible_external_action": false,
+    "preflight_completed": false,
+    "approval_granted": false,
+    "compensation_available": false
+  },
+  "old": {
+    "manifest": {"reference": "auth-policy@1", "authorized_principals": ["alice"], "provides": ["auth/v1"]},
+    "atoms": [{"id": "auth.ttl-30m", "statement": "Access tokens expire after 30 minutes.", "compression_class": "P1_STRUCTURED", "token_cost": 2, "relevance": 1, "evidence_refs": ["ev-old-policy"]}],
+    "evidence": [{"id": "ev-old-policy", "digest": "sha256:old-policy", "exact_text": "The access-token lifetime is 30 minutes.", "fresh": true}],
+    "graph": {"requires": [], "conflicts": []},
+    "replacement_contract": {"replaces": null, "accepts_interfaces": [], "target_effects_passed": true, "protected_invariants_passed": true, "forbidden_spillover_detected": false},
+    "compression_policy": {"p0_exact": true},
+    "integrity": {"valid": true}
+  },
+  "candidate": {
+    "manifest": {"reference": "auth-policy@2", "authorized_principals": ["alice"], "provides": ["auth/v2"]},
+    "atoms": [{"id": "auth.ttl-15m", "statement": "Access tokens expire after 15 minutes.", "compression_class": "P1_STRUCTURED", "token_cost": 3, "relevance": 100, "evidence_refs": ["ev-new-policy"]}],
+    "evidence": [{"id": "ev-new-policy", "digest": "sha256:new-policy", "exact_text": "The access-token lifetime is 15 minutes.", "fresh": false}],
+    "graph": {"requires": [], "conflicts": []},
+    "replacement_contract": {"replaces": "auth-policy@1", "accepts_interfaces": ["auth/v1"], "target_effects_passed": true, "protected_invariants_passed": true, "forbidden_spillover_detected": false},
+    "compression_policy": {"p0_exact": true},
+    "integrity": {"valid": true}
+  },
+  "expected": {
+    "activation": false,
+    "active_capsule": "auth-policy@1",
+    "blocker": "STALE_EVIDENCE",
+    "rollback": false
+  }
+}

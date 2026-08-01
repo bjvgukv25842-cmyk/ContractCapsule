@@ -1,0 +1,40 @@
+{
+  "name": "P0 overflow",
+  "description": "Exact P0 content alone exceeds the view budget, so it is never silently compressed or dropped.",
+  "principal": "alice",
+  "adapter": "reference-agent/v1",
+  "budget": 10,
+  "safe_boundary": true,
+  "task": {
+    "task_id": "load-critical-auth-policy",
+    "required_interfaces": ["auth/v2"],
+    "irreversible_external_action": false,
+    "preflight_completed": false,
+    "approval_granted": false,
+    "compensation_available": false
+  },
+  "old": {
+    "manifest": {"reference": "auth-policy@1", "authorized_principals": ["alice"], "provides": ["auth/v1"]},
+    "atoms": [{"id": "auth.legacy", "statement": "Use the legacy critical policy.", "compression_class": "P0_EXACT", "token_cost": 2, "relevance": 1, "evidence_refs": ["ev-old-policy"]}],
+    "evidence": [{"id": "ev-old-policy", "digest": "sha256:old-policy", "exact_text": "The legacy critical policy is active.", "fresh": true}],
+    "graph": {"requires": [], "conflicts": []},
+    "replacement_contract": {"replaces": null, "accepts_interfaces": [], "target_effects_passed": true, "protected_invariants_passed": true, "forbidden_spillover_detected": false},
+    "compression_policy": {"p0_exact": true},
+    "integrity": {"valid": true}
+  },
+  "candidate": {
+    "manifest": {"reference": "auth-policy@2", "authorized_principals": ["alice"], "provides": ["auth/v2"]},
+    "atoms": [{"id": "auth.critical-policy", "statement": "The complete critical authentication policy must remain exact.", "compression_class": "P0_EXACT", "token_cost": 11, "relevance": 100, "evidence_refs": ["ev-critical-policy"]}],
+    "evidence": [{"id": "ev-critical-policy", "digest": "sha256:critical-policy", "exact_text": "The complete critical authentication policy must remain exact.", "fresh": true}],
+    "graph": {"requires": [], "conflicts": []},
+    "replacement_contract": {"replaces": "auth-policy@1", "accepts_interfaces": ["auth/v1"], "target_effects_passed": true, "protected_invariants_passed": true, "forbidden_spillover_detected": false},
+    "compression_policy": {"p0_exact": true},
+    "integrity": {"valid": true}
+  },
+  "expected": {
+    "activation": false,
+    "active_capsule": "auth-policy@1",
+    "blocker": "P0_BUDGET_OVERFLOW",
+    "rollback": false
+  }
+}
