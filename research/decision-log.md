@@ -104,3 +104,12 @@
   use GitHub's ID-plus-login noreply address for commit attribution and privacy.
 - Boundary: no private email was inferred, global configuration was unchanged,
   and this identity is not treated as a confirmed paper author identity.
+
+## M0-011 - M0 technical commit created
+
+- Date: 2026-08-01
+- Status: completed
+- Commit: `52a5c2da76143a53eb8a554b6550eee5d9dfffcf`.
+- Message: `chore: bootstrap ContractCapsule FSE research project`.
+- Verification: commit exited 0 and contains the 20 reviewed M0 files.
+- Boundary: no upstream was set and no push was performed.
