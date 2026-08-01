@@ -141,10 +141,118 @@
 ## M0-013 - M1 execution preflight blocked
 
 - Date: 2026-08-01
-- Status: blocking before M1
+- Status: resolved on 2026-08-01 in the later M1 session
 - Evidence: `superpowers:executing-plans` is absent from the current session's
   registered Available Skills inventory.
 - Decision: cached or discoverable files are not treated as a registered Skill,
   and the M0 manual-execution waiver is not extended to M1.
-- Consequence: no M1 branch, worktree, formal model, fixture, literature entry,
-  or implementation is created until the required Skill is actually available.
+- Historical consequence: no M1 branch, worktree, formal model, fixture,
+  literature entry, or implementation was created while the Skill was absent.
+- Resolution: a later session registered the official curated Superpowers
+  plugin and exposed `superpowers:executing-plans` as an available Skill. Its
+  complete `SKILL.md` and required worktree, TDD, subagent, review, and branch
+  workflow instructions were read before M1 work began. No manual M0 waiver
+  was reused and no unknown code was installed.
+
+## M1-001 - M1 authorization and schedule
+
+- Date: 2026-08-01
+- Status: accepted for M1 only
+- Decision: execute M1, and no other module, under the author's explicit
+  authorization after M0 closure.
+- Schedule: M1's frozen window is 2026-08-03 through 2026-08-07. Work began two
+  days early rather than late. The author explicitly authorized M1; no module,
+  integrity, test, or human gate was skipped.
+- Boundary: M2-M11, production CAS/Registry/Builder/Resolver, adapters, MCP,
+  Skill, benchmark experiments, and UI remain unauthorized.
+
+## M1-002 - Isolated worktree and branch
+
+- Date: 2026-08-01
+- Status: implemented
+- Decision: use branch `codex/m1-formal-model` in isolated worktree
+  `.worktrees/m1-formal-model`, based on `78d913f` after adding the worktree
+  directory to `.gitignore` on the M0 branch.
+- Verification: the M1 baseline had 4 passing tests, Ruff passed, Python was
+  3.12.13, and both frozen hashes matched before implementation.
+- Boundary: no push or merge is performed at M1.
+
+## M1-003 - Executable reference semantics and TDD
+
+- Date: 2026-08-01
+- Status: implemented; G0 author review pending
+- Decision: implement a pure in-memory M1 reference model in
+  `src/contractcapsule/formal.py`; keep schemas, persistence, and durable active
+  pointers in their later frozen modules.
+- Initial Red: formal-case collection exited 2 with
+  `ModuleNotFoundError: contractcapsule.formal`.
+- Initial Green: 18 formal tests and 22 cumulative tests passed; Ruff and mypy
+  passed.
+- Review Red: independent specification review reproduced fail-open report
+  substitution, metadata stripping, duplicate identity, and unknown
+  compression-class defects. Added regressions produced 12 failures, with the
+  original active reference demonstrably changing in the exploitable paths.
+- Review Green: report/candidate/task fingerprints, recomputed view invariants,
+  identifier checks, exact blocker assertions, and interface-before-ranking
+  made 30 formal tests pass. The historical failures remain recorded; they
+  were not hidden or weakened.
+
+## M1-004 - Replacement and rollback boundary
+
+- Date: 2026-08-01
+- Status: accepted as the M1 model boundary
+- Decision: activation receipts model the all-or-nothing active-reference
+  transition and retain the prior reference. The in-memory fingerprints bind a
+  single decision but do not substitute for M2 integrity storage or M5 durable
+  pointer transactions.
+- Irreversible effects: rollback restores future context only. An external
+  action requires preflight, approval, or compensation and is never described
+  as transactionally undone by context rollback.
+
+## M1-005 - Related-work verification
+
+- Date: 2026-08-01
+- Status: completed for the M1 matrix; submission re-audit still required
+- Decision: record only claims checked against primary papers, publisher pages,
+  arXiv primary manuscripts, or official technical/product documentation.
+- Evidence: `research/literature.csv` contains eleven rows with authors,
+  venue/specification, DOI where available, direct URL, retrieval date,
+  verification basis, boundary class, overlap risk, and citation status.
+- Closest overlap: Context Codec is high risk because it already formalizes
+  typed source-grounded atoms and verifiable commitment preservation. The M1
+  claim therefore excludes atoms and compression and rests on behavioral
+  old/new replacement, TER/PIP/BSR, task/report binding, atomic activation, and
+  rollback.
+- Boundary: a verified citation means its recorded metadata and matrix claim
+  were checked; it is not a judgment that every source is peer reviewed. arXiv
+  works and official documentation are labeled as such.
+
+## M1-006 - Preregistered analysis protocol
+
+- Date: 2026-08-01
+- Status: frozen candidate pending G0 author approval
+- Decision: freeze RQ1-RQ4, primary and secondary outcomes, conditions,
+  ablations, units of analysis, inclusion/exclusion rules, infrastructure-only
+  retry policy, and statistical test families in `research/protocol.md` before
+  any full experiment.
+- Statistics: task-level paired aggregation, task-cluster bootstrap intervals,
+  exact McNemar for paired binary outcomes, paired permutation tests for
+  numeric/rate outcomes, preregistered Wilcoxon sensitivity conditions, effect
+  sizes, and Holm correction within RQ families.
+- Boundary: M8 may freeze draw counts after runtime preflight but cannot select
+  tests or outcomes from favorable directions. Protocol amendments are
+  versioned and preserve prior text.
+
+## M1-007 - G0 novelty assessment
+
+- Date: 2026-08-01
+- Status: recommend pass; human author decision pending
+- Decision: M1 artifacts distinguish ContractCapsule from summary plus
+  metadata, compression-only, retrieval-only, memory-only, and atom-only work.
+- Basis: replacement correctness is explicitly defined; TER/PIP/BSR are
+  separately measurable; evidence, closure, conflict, activation, rollback,
+  and irreversible effects are formal conditions; exactly ten frozen cases
+  separate safe and unsafe state transitions; core contributions do not rely
+  only on a product description; related-work rows are source-verified.
+- Limitation: this is formal and protocol evidence, not a claim that C2-C5 or
+  any empirical RQ already succeeds. M2 remains blocked until author approval.
