@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "ActivationPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "approval_required": {
+          "title": "Approval Required",
+          "type": "boolean"
+        },
+        "risk": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "title": "Risk",
+          "type": "string"
+        },
+        "safe_boundary": {
+          "const": "before-next-agent-action",
+          "title": "Safe Boundary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "risk",
+        "approval_required",
+        "safe_boundary"
+      ],
+      "title": "ActivationPolicy",
+      "type": "object"
+    },
+    "RollbackPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "compensating_action": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Compensating Action"
+        },
+        "pointer": {
+          "minLength": 1,
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer",
+        "compensating_action"
+      ],
+      "title": "RollbackPolicy",
+      "type": "object"
+    },
+    "VerificationCommands": {
+      "additionalProperties": false,
+      "properties": {
+        "behavioral": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Behavioral",
+          "type": "array"
+        },
+        "differential": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Differential",
+          "type": "array"
+        },
+        "static": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Static",
+          "type": "array"
+        }
+      },
+      "required": [
+        "static",
+        "behavioral",
+        "differential"
+      ],
+      "title": "VerificationCommands",
+      "type": "object"
+    }
+  },
+  "$id": "https://contractcapsule.example/schemas/replacement-contract.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "activation": {
+      "$ref": "#/$defs/ActivationPolicy"
+    },
+    "allowed_scope": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Allowed Scope",
+      "type": "array"
+    },
+    "contract_id": {
+      "minLength": 1,
+      "title": "Contract Id",
+      "type": "string"
+    },
+    "extensions": {
+      "additionalProperties": true,
+      "propertyNames": {
+        "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "title": "Extensions",
+      "type": "object"
+    },
+    "forbidden_spillover": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Forbidden Spillover",
+      "type": "array"
+    },
+    "preconditions": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Preconditions",
+      "type": "array"
+    },
+    "protected_invariants": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Protected Invariants",
+      "type": "array"
+    },
+    "replaces": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Replaces"
+    },
+    "rollback": {
+      "$ref": "#/$defs/RollbackPolicy"
+    },
+    "target_effects": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Target Effects",
+      "type": "array"
+    },
+    "verification": {
+      "$ref": "#/$defs/VerificationCommands"
+    }
+  },
+  "required": [
+    "contract_id",
+    "replaces",
+    "preconditions",
+    "target_effects",
+    "protected_invariants",
+    "allowed_scope",
+    "forbidden_spillover",
+    "verification",
+    "activation",
+    "rollback"
+  ],
+  "title": "ReplacementContract",
+  "type": "object"
+}

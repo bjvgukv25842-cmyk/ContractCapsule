@@ -1,0 +1,216 @@
+{
+  "$defs": {
+    "Atom": {
+      "additionalProperties": false,
+      "properties": {
+        "atom_id": {
+          "minLength": 1,
+          "title": "Atom Id",
+          "type": "string"
+        },
+        "authority": {
+          "minLength": 1,
+          "title": "Authority",
+          "type": "string"
+        },
+        "compression_class": {
+          "enum": [
+            "P0_EXACT",
+            "P1_STRUCTURED",
+            "P2_EVIDENCE",
+            "P3_SUMMARY",
+            "P4_TRANSIENT"
+          ],
+          "title": "Compression Class",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "conflicts_with": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Conflicts With",
+          "type": "array"
+        },
+        "evidence_refs": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "exceptions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Exceptions",
+          "type": "array"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "kind": {
+          "enum": [
+            "policy",
+            "invariant",
+            "fact",
+            "decision",
+            "procedure",
+            "interface",
+            "tool_contract",
+            "example",
+            "episodic_observation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "modality": {
+          "enum": [
+            "MUST",
+            "SHOULD",
+            "MAY",
+            "INFORMATIVE"
+          ],
+          "title": "Modality",
+          "type": "string"
+        },
+        "refresh_policy": {
+          "minLength": 1,
+          "title": "Refresh Policy",
+          "type": "string"
+        },
+        "requires_atoms": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Requires Atoms",
+          "type": "array"
+        },
+        "scope": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Scope",
+          "type": "array"
+        },
+        "sensitivity": {
+          "enum": [
+            "public",
+            "internal",
+            "confidential",
+            "restricted"
+          ],
+          "title": "Sensitivity",
+          "type": "string"
+        },
+        "statement": {
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "candidate",
+            "validated",
+            "deprecated",
+            "revoked"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "validity": {
+          "$ref": "#/$defs/Validity"
+        }
+      },
+      "required": [
+        "atom_id",
+        "kind",
+        "statement",
+        "modality",
+        "scope",
+        "exceptions",
+        "validity",
+        "authority",
+        "status",
+        "confidence",
+        "evidence_refs",
+        "requires_atoms",
+        "conflicts_with",
+        "sensitivity",
+        "compression_class",
+        "refresh_policy"
+      ],
+      "title": "Atom",
+      "type": "object"
+    },
+    "Validity": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "title": "From",
+          "type": "string"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Until"
+        }
+      },
+      "required": [
+        "from",
+        "until"
+      ],
+      "title": "Validity",
+      "type": "object"
+    }
+  },
+  "$id": "https://contractcapsule.example/schemas/semantic-payload.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "atoms": {
+      "items": {
+        "$ref": "#/$defs/Atom"
+      },
+      "minItems": 1,
+      "title": "Atoms",
+      "type": "array"
+    },
+    "extensions": {
+      "additionalProperties": true,
+      "propertyNames": {
+        "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "title": "Extensions",
+      "type": "object"
+    }
+  },
+  "required": [
+    "atoms"
+  ],
+  "title": "SemanticPayload",
+  "type": "object"
+}

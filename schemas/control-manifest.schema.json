@@ -1,0 +1,204 @@
+{
+  "$defs": {
+    "IntegrityReferences": {
+      "additionalProperties": false,
+      "properties": {
+        "lock": {
+          "minLength": 1,
+          "title": "Lock",
+          "type": "string"
+        },
+        "signature": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Signature"
+        }
+      },
+      "required": [
+        "lock",
+        "signature"
+      ],
+      "title": "IntegrityReferences",
+      "type": "object"
+    },
+    "Scope": {
+      "additionalProperties": false,
+      "properties": {
+        "environments": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Environments",
+          "type": "array"
+        },
+        "paths": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Paths",
+          "type": "array"
+        },
+        "repositories": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Repositories",
+          "type": "array"
+        }
+      },
+      "required": [
+        "repositories",
+        "paths",
+        "environments"
+      ],
+      "title": "Scope",
+      "type": "object"
+    }
+  },
+  "$id": "https://contractcapsule.example/schemas/control-manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority": {
+      "minLength": 1,
+      "title": "Authority",
+      "type": "string"
+    },
+    "canonical_profile": {
+      "const": "CCS-2.1-canonical-v1",
+      "title": "Canonical Profile",
+      "type": "string"
+    },
+    "capsule_id": {
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+(?:-[a-z0-9]+)*$",
+      "title": "Capsule Id",
+      "type": "string"
+    },
+    "conflicts": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Conflicts",
+      "type": "array"
+    },
+    "content_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Content Digest",
+      "type": "string"
+    },
+    "created_from": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Created From",
+      "type": "array"
+    },
+    "extensions": {
+      "additionalProperties": true,
+      "propertyNames": {
+        "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "title": "Extensions",
+      "type": "object"
+    },
+    "integrity": {
+      "$ref": "#/$defs/IntegrityReferences"
+    },
+    "lifecycle": {
+      "enum": [
+        "DRAFT",
+        "VALIDATED",
+        "PUBLISHED",
+        "ACTIVE",
+        "DEPRECATED",
+        "REVOKED"
+      ],
+      "title": "Lifecycle",
+      "type": "string"
+    },
+    "owner": {
+      "minLength": 1,
+      "title": "Owner",
+      "type": "string"
+    },
+    "provides": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Provides",
+      "type": "array"
+    },
+    "requires": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Requires",
+      "type": "array"
+    },
+    "scope": {
+      "$ref": "#/$defs/Scope"
+    },
+    "sensitivity": {
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    },
+    "spec_version": {
+      "const": "CCS-2.1",
+      "title": "Spec Version",
+      "type": "string"
+    },
+    "tenant": {
+      "minLength": 1,
+      "title": "Tenant",
+      "type": "string"
+    },
+    "version": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "spec_version",
+    "canonical_profile",
+    "capsule_id",
+    "version",
+    "content_digest",
+    "owner",
+    "tenant",
+    "scope",
+    "authority",
+    "sensitivity",
+    "provides",
+    "requires",
+    "conflicts",
+    "lifecycle",
+    "created_from",
+    "integrity"
+  ],
+  "title": "ControlManifest",
+  "type": "object"
+}

@@ -9,6 +9,7 @@ dependencies = [
     "networkx>=3.6.1",
     "pydantic>=2.13.4",
     "pyyaml>=6.0.3",
+    "rfc8785>=0.1.4,<0.2",
     "typer>=0.27.0",
 ]
 
@@ -23,6 +24,8 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.16.1",
+    "types-jsonschema>=4.26.0.20260109",
+    "types-pyyaml>=6.0.12.20250915",
 ]
 
 [tool.ruff]

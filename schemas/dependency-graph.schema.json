@@ -1,0 +1,88 @@
+{
+  "$defs": {
+    "DependencyEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "edge_type": {
+          "enum": [
+            "requires",
+            "provides",
+            "conflicts",
+            "replaces",
+            "optional"
+          ],
+          "title": "Edge Type",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "mandatory": {
+          "title": "Mandatory",
+          "type": "boolean"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        },
+        "version_constraint": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version Constraint"
+        }
+      },
+      "required": [
+        "source",
+        "target",
+        "edge_type",
+        "version_constraint",
+        "mandatory"
+      ],
+      "title": "DependencyEdge",
+      "type": "object"
+    }
+  },
+  "$id": "https://contractcapsule.example/schemas/dependency-graph.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "edges": {
+      "items": {
+        "$ref": "#/$defs/DependencyEdge"
+      },
+      "title": "Edges",
+      "type": "array"
+    },
+    "extensions": {
+      "additionalProperties": true,
+      "propertyNames": {
+        "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "title": "Extensions",
+      "type": "object"
+    }
+  },
+  "required": [
+    "edges"
+  ],
+  "title": "DependencyGraph",
+  "type": "object"
+}

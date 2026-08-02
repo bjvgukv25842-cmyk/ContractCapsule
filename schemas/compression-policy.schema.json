@@ -1,0 +1,193 @@
+{
+  "$defs": {
+    "CompressionClassPolicy": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "name": {
+                "const": "P0_EXACT"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "then": {
+            "properties": {
+              "lossy_compression": {
+                "const": "forbidden"
+              },
+              "rendering": {
+                "const": "exact"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "expansion_triggers": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Expansion Triggers",
+          "type": "array"
+        },
+        "lossy_compression": {
+          "enum": [
+            "forbidden",
+            "validated_only",
+            "excerpt_only",
+            "allowed"
+          ],
+          "title": "Lossy Compression",
+          "type": "string"
+        },
+        "name": {
+          "enum": [
+            "P0_EXACT",
+            "P1_STRUCTURED",
+            "P2_EVIDENCE",
+            "P3_SUMMARY",
+            "P4_TRANSIENT"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "rendering": {
+          "minLength": 1,
+          "title": "Rendering",
+          "type": "string"
+        },
+        "ttl": {
+          "anyOf": [
+            {
+              "pattern": "^P[0-9]+D$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ttl"
+        }
+      },
+      "required": [
+        "name",
+        "rendering",
+        "lossy_compression",
+        "expansion_triggers",
+        "ttl"
+      ],
+      "title": "CompressionClassPolicy",
+      "type": "object"
+    }
+  },
+  "$id": "https://contractcapsule.example/schemas/compression-policy.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "classes": {
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "name": {
+                "const": "P0_EXACT"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "maxContains": 1,
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "name": {
+                "const": "P1_STRUCTURED"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "maxContains": 1,
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "name": {
+                "const": "P2_EVIDENCE"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "maxContains": 1,
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "name": {
+                "const": "P3_SUMMARY"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "maxContains": 1,
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "properties": {
+              "name": {
+                "const": "P4_TRANSIENT"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "maxContains": 1,
+          "minContains": 1
+        }
+      ],
+      "items": {
+        "$ref": "#/$defs/CompressionClassPolicy"
+      },
+      "maxItems": 5,
+      "minItems": 5,
+      "title": "Classes",
+      "type": "array"
+    },
+    "extensions": {
+      "additionalProperties": true,
+      "propertyNames": {
+        "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "title": "Extensions",
+      "type": "object"
+    },
+    "policy_version": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+      "title": "Policy Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "policy_version",
+    "classes"
+  ],
+  "title": "CompressionPolicy",
+  "type": "object"
+}

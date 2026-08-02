@@ -1,0 +1,244 @@
+{
+  "$defs": {
+    "ArtifactChecksum": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "digest"
+      ],
+      "title": "ArtifactChecksum",
+      "type": "object"
+    },
+    "CapsuleDependency": {
+      "additionalProperties": false,
+      "properties": {
+        "capsule_id": {
+          "minLength": 1,
+          "title": "Capsule Id",
+          "type": "string"
+        },
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "capsule_id",
+        "version",
+        "digest"
+      ],
+      "title": "CapsuleDependency",
+      "type": "object"
+    },
+    "IntegrityLock": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_versions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Adapter Versions",
+          "type": "array"
+        },
+        "capsule_dependencies": {
+          "items": {
+            "$ref": "#/$defs/CapsuleDependency"
+          },
+          "title": "Capsule Dependencies",
+          "type": "array"
+        },
+        "compiler_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Compiler Version",
+          "type": "string"
+        },
+        "compression_policy_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Compression Policy Version",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "model_series": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Model Series",
+          "type": "array"
+        },
+        "parameters": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Parameters",
+          "type": "array"
+        },
+        "runtime_config_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Runtime Config Digest",
+          "type": "string"
+        },
+        "source_commits": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Source Commits",
+          "type": "array"
+        },
+        "test_set_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Test Set Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "capsule_dependencies",
+        "source_commits",
+        "compiler_version",
+        "adapter_versions",
+        "compression_policy_version",
+        "test_set_version",
+        "model_series",
+        "parameters",
+        "runtime_config_digest"
+      ],
+      "title": "IntegrityLock",
+      "type": "object"
+    },
+    "SignaturePolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "minLength": 1,
+          "title": "Algorithm",
+          "type": "string"
+        },
+        "input_profile": {
+          "const": "CCS-2.1-signature-v1",
+          "title": "Input Profile",
+          "type": "string"
+        },
+        "key_id": {
+          "minLength": 1,
+          "title": "Key Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "key_id",
+        "input_profile"
+      ],
+      "title": "SignaturePolicy",
+      "type": "object"
+    },
+    "TestDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "static",
+            "evidence",
+            "compression",
+            "behavioral"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "test_id": {
+          "minLength": 1,
+          "title": "Test Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "test_id",
+        "kind",
+        "path",
+        "digest"
+      ],
+      "title": "TestDefinition",
+      "type": "object"
+    }
+  },
+  "$id": "https://contractcapsule.example/schemas/tests-integrity.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_checksums": {
+      "items": {
+        "$ref": "#/$defs/ArtifactChecksum"
+      },
+      "title": "Artifact Checksums",
+      "type": "array"
+    },
+    "extensions": {
+      "additionalProperties": true,
+      "propertyNames": {
+        "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "title": "Extensions",
+      "type": "object"
+    },
+    "lock": {
+      "$ref": "#/$defs/IntegrityLock"
+    },
+    "signature_policy": {
+      "$ref": "#/$defs/SignaturePolicy"
+    },
+    "tests": {
+      "items": {
+        "$ref": "#/$defs/TestDefinition"
+      },
+      "minItems": 1,
+      "title": "Tests",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tests",
+    "lock",
+    "artifact_checksums",
+    "signature_policy"
+  ],
+  "title": "TestsIntegrity",
+  "type": "object"
+}

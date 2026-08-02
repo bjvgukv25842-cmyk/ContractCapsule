@@ -1,0 +1,363 @@
+{
+  "$defs": {
+    "CASEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "access_policy": {
+          "minLength": 1,
+          "title": "Access Policy",
+          "type": "string"
+        },
+        "atom_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Atom Ids",
+          "type": "array"
+        },
+        "captured_at": {
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "evidence_id": {
+          "minLength": 1,
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "media_type": {
+          "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+\\-]+)*$",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "mode": {
+          "const": "CAS",
+          "title": "Mode",
+          "type": "string"
+        },
+        "retention": {
+          "minLength": 1,
+          "title": "Retention",
+          "type": "string"
+        },
+        "validation": {
+          "enum": [
+            "verified",
+            "stale",
+            "unavailable",
+            "revoked"
+          ],
+          "title": "Validation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "atom_ids",
+        "content_digest",
+        "media_type",
+        "captured_at",
+        "retention",
+        "access_policy",
+        "validation",
+        "mode"
+      ],
+      "title": "CASEvidence",
+      "type": "object"
+    },
+    "ExternalImmutableEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "access_policy": {
+          "minLength": 1,
+          "title": "Access Policy",
+          "type": "string"
+        },
+        "atom_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Atom Ids",
+          "type": "array"
+        },
+        "captured_at": {
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "evidence_id": {
+          "minLength": 1,
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "media_type": {
+          "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+\\-]+)*$",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "mode": {
+          "const": "EXTERNAL_IMMUTABLE",
+          "title": "Mode",
+          "type": "string"
+        },
+        "retention": {
+          "minLength": 1,
+          "title": "Retention",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "uri": {
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "validation": {
+          "enum": [
+            "verified",
+            "stale",
+            "unavailable",
+            "revoked"
+          ],
+          "title": "Validation",
+          "type": "string"
+        },
+        "verification_method": {
+          "minLength": 1,
+          "title": "Verification Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "atom_ids",
+        "content_digest",
+        "media_type",
+        "captured_at",
+        "retention",
+        "access_policy",
+        "validation",
+        "mode",
+        "uri",
+        "source",
+        "verification_method"
+      ],
+      "title": "ExternalImmutableEvidence",
+      "type": "object"
+    },
+    "GitImmutableEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "access_policy": {
+          "minLength": 1,
+          "title": "Access Policy",
+          "type": "string"
+        },
+        "atom_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Atom Ids",
+          "type": "array"
+        },
+        "captured_at": {
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "evidence_id": {
+          "minLength": 1,
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "locator": {
+          "$ref": "#/$defs/GitLocator"
+        },
+        "media_type": {
+          "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+\\-]+)*$",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "mode": {
+          "const": "GIT_IMMUTABLE",
+          "title": "Mode",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "repository": {
+          "minLength": 1,
+          "title": "Repository",
+          "type": "string"
+        },
+        "retention": {
+          "minLength": 1,
+          "title": "Retention",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^(?:sha1:[0-9a-f]{40}|sha256:[0-9a-f]{64})$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "validation": {
+          "enum": [
+            "verified",
+            "stale",
+            "unavailable",
+            "revoked"
+          ],
+          "title": "Validation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "atom_ids",
+        "content_digest",
+        "media_type",
+        "captured_at",
+        "retention",
+        "access_policy",
+        "validation",
+        "mode",
+        "repository",
+        "revision",
+        "path",
+        "locator"
+      ],
+      "title": "GitImmutableEvidence",
+      "type": "object"
+    },
+    "GitLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "end_line": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "End Line",
+          "type": "integer"
+        },
+        "span_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Span Digest",
+          "type": "string"
+        },
+        "start_line": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Start Line",
+          "type": "integer"
+        },
+        "symbol_or_heading": {
+          "minLength": 1,
+          "title": "Symbol Or Heading",
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol_or_heading",
+        "start_line",
+        "end_line",
+        "span_digest"
+      ],
+      "title": "GitLocator",
+      "type": "object"
+    }
+  },
+  "$id": "https://contractcapsule.example/schemas/evidence-plane.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "extensions": {
+      "additionalProperties": true,
+      "propertyNames": {
+        "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "title": "Extensions",
+      "type": "object"
+    },
+    "records": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "CAS": "#/$defs/CASEvidence",
+            "EXTERNAL_IMMUTABLE": "#/$defs/ExternalImmutableEvidence",
+            "GIT_IMMUTABLE": "#/$defs/GitImmutableEvidence"
+          },
+          "propertyName": "mode"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/CASEvidence"
+          },
+          {
+            "$ref": "#/$defs/GitImmutableEvidence"
+          },
+          {
+            "$ref": "#/$defs/ExternalImmutableEvidence"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Records",
+      "type": "array"
+    }
+  },
+  "required": [
+    "records"
+  ],
+  "title": "EvidencePlane",
+  "type": "object"
+}

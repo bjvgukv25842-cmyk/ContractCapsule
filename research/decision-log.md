@@ -284,3 +284,199 @@
 - Integration: the author selected Option 1, local merge into the uniquely
   verified baseline branch after all required checks pass. No pull, push, PR,
   or M2 work is authorized by this decision.
+
+## M2-001 - Early-start authorization and pre-implementation stop
+
+- Date: 2026-08-02
+- Status: author-approved schedule deviation; resolved safety stop
+- Decision: begin M2 six days before its frozen 2026-08-08 through 2026-08-12
+  window from the verified M1 integration commit
+  `c24696e88117b70ed386d586ce9d548951f6287d`.
+- Boundary: the early start does not waive module order, TDD, frozen hashes,
+  fail-closed behavior, research integrity, verification, or the M2 human exit
+  gate. M3-M11 remain unauthorized.
+- Stop history: the first M2 preflight stopped before branch creation or file
+  modification because canonical self-reference, CAS authorization, identical
+  republish behavior, and evidence storage modes were not uniquely specified.
+  The author reviewed that report and supplied the implementation decisions
+  recorded below. No code or research artifact was changed before approval.
+
+## M2-002 - CCS-2.1-canonical-v1 implementation configuration
+
+- Date: 2026-08-02
+- Status: author-approved for M2 implementation
+- Canonical identity: construct an explicit seven-module A-zone projection
+  named `CCS-2.1-canonical-v1`; encode it with RFC 8785/JCS-compatible JSON and
+  return `sha256:` followed by 64 lowercase hexadecimal characters.
+- Included identity content: all declared semantic and security fields of the
+  Control Manifest, Semantic Payload, Evidence Plane, Dependency Graph,
+  Replacement Contract, Compression Policy, and Tests & Integrity, including
+  authority, scope, lifecycle, evidence digests, access policies, dependency
+  edges, tests, locks, and permitted core extensions.
+- Excluded identity content: `manifest.content_digest`, repeated root-digest
+  copies, detached signature values and transport envelopes, any package-byte
+  digest, and all B-zone or C-zone derivatives including embeddings, caches,
+  compiled views, indexes, runtime logs, observations, and runtime timestamps.
+  M2 does not add a public package-digest field or signature implementation.
+- Canonical input rules: reject duplicate JSON keys, invalid UTF-8, lone
+  surrogates, NaN, infinities, coercive or ambiguous numeric inputs, and
+  undeclared fields outside the permitted extension namespace. Do not perform
+  Unicode normalization. Preserve array order unless a specific schema field
+  is explicitly modeled as a set with a unique ordering key.
+- Signature boundary: a later signer will sign
+  `b"CCS-2.1-signature-v1\\0" + content_digest.encode("ascii")`; M2 neither
+  implements nor claims production signature security. M1 `repr()`-based
+  fingerprints remain decision witnesses only.
+- CAS authorization: one repository/authority trust domain; blob writes grant
+  no read permission. A test-injectable trusted Policy Resolver defaults to
+  deny. Capsule authority/scope/access-policy declarations may only narrow the
+  Resolver decision. Successful publication atomically stores the immutable
+  publication, evidence references, and digest grants. Public reads require at
+  least one authorized published reference and reverify stored bytes.
+- Grant composition: distinct valid published references to identical bytes
+  form a read-permission union, while each reference is independently checked
+  by the trusted Resolver. Cross-tenant isolation, revocation, dynamic roles,
+  and distributed authorization are outside M2.
+- Republish rule: an exact immutable publication is idempotent only after
+  caller authorization and full stored-field equality checks; it performs no
+  write, timestamp update, new grant, or duplicate evidence insertion. The
+  same ID/version with a different digest or immutable metadata fails closed.
+  The Registry uses a unique `(capsule_id, version)` key and never uses replace
+  semantics.
+- Evidence modes: `CAS` requires a locally present, digest-verified blob;
+  `GIT_IMMUTABLE` requires a normalized repository identity, algorithm-tagged
+  full commit OID, literal safe repository-relative path, evidence digest, and
+  media type; `EXTERNAL_IMMUTABLE` requires a normalized HTTPS or permitted
+  persistent URI, digest, media type, and source-verification metadata. Modes
+  never silently fall back and M2 performs no network retrieval.
+- Protocol boundary: this is an M2 implementation configuration and does not
+  modify CCS-2.1, the frozen execution plan, or the frozen analysis protocol.
+
+## M2-003 - Explicit canonical identity field projection
+
+- Date: 2026-08-02
+- Status: implemented and executable; M2 human exit pending
+- Root domain field: `profile`, fixed to `CCS-2.1-canonical-v1`.
+- Included Control Manifest paths:
+  `core.control_manifest.spec_version`, `.canonical_profile`, `.capsule_id`,
+  `.version`, `.owner`, `.tenant`, `.scope.repositories[]`, `.scope.paths[]`,
+  `.scope.environments[]`, `.authority`, `.sensitivity`, `.provides[]`,
+  `.requires[]`, `.conflicts[]`, `.lifecycle`, `.created_from[]`,
+  `.integrity.lock`, `.integrity.signature`, and `.extensions.*`.
+- Included Semantic Payload paths: `core.semantic_payload.extensions.*` and,
+  for every ordered `atoms[]` entry, `.atom_id`, `.kind`, `.statement`,
+  `.modality`, `.scope[]`, `.exceptions[]`, `.validity.from`,
+  `.validity.until`, `.authority`, `.status`, `.confidence`,
+  `.evidence_refs[]`, `.requires_atoms[]`, `.conflicts_with[]`,
+  `.sensitivity`, `.compression_class`, `.refresh_policy`, and
+  `.extensions.*`.
+- Included Evidence Plane paths: `core.evidence_plane.extensions.*` and, for
+  every ordered `records[]` entry, `.mode`, `.evidence_id`, `.atom_ids[]`,
+  `.content_digest`, `.media_type`, `.captured_at`, `.retention`,
+  `.access_policy`, `.validation`, and `.extensions.*`. A
+  `GIT_IMMUTABLE` record additionally includes `.repository`, `.revision`,
+  `.path`, `.locator.symbol_or_heading`, `.locator.start_line`,
+  `.locator.end_line`, and `.locator.span_digest`; an
+  `EXTERNAL_IMMUTABLE` record additionally includes `.uri`, `.source`, and
+  `.verification_method`.
+- Included Dependency Graph paths: `core.dependency_graph.extensions.*` and,
+  for every ordered `edges[]` entry, `.source`, `.target`, `.edge_type`,
+  `.version_constraint`, `.mandatory`, and `.extensions.*`.
+- Included Replacement Contract paths:
+  `core.replacement_contract.contract_id`, `.replaces`, `.preconditions[]`,
+  `.target_effects[]`, `.protected_invariants[]`, `.allowed_scope[]`,
+  `.forbidden_spillover[]`, `.verification.static[]`,
+  `.verification.behavioral[]`, `.verification.differential[]`,
+  `.activation.risk`, `.activation.approval_required`,
+  `.activation.safe_boundary`, `.rollback.pointer`,
+  `.rollback.compensating_action`, and `.extensions.*`.
+- Included Compression Policy paths: `core.compression_policy.policy_version`,
+  `.extensions.*`, and for every ordered `.classes[]` entry, `.name`,
+  `.rendering`, `.lossy_compression`, `.expansion_triggers[]`, and `.ttl`.
+- Included Tests & Integrity paths: `core.tests_integrity.extensions.*`; for
+  every ordered `.tests[]` entry, `.test_id`, `.kind`, `.path`, and `.digest`;
+  `.lock.capsule_dependencies[].capsule_id`, `.version`, and `.digest`;
+  `.lock.source_commits[]`, `.compiler_version`, `.adapter_versions[]`,
+  `.compression_policy_version`, `.test_set_version`, `.model_series[]`,
+  `.parameters[]`, `.runtime_config_digest`, and `.extensions.*`; every
+  `.artifact_checksums[].path` and `.digest`; and
+  `.signature_policy.algorithm`, `.key_id`, and `.input_profile`.
+- Explicit exclusions: `core.control_manifest.content_digest`; any repeated
+  root-digest carrier; `detached_signature.algorithm`, `.key_id`, `.value`,
+  and `.envelope.*` as a transport record (the normative algorithm/key/profile
+  are bound through `tests_integrity.signature_policy`); any package-byte
+  digest; `derived_artifacts.*`; and `runtime_sidecar.*`.
+- Ordering: all arrays retain input order and order is identity-relevant under
+  the author's canonical-v1 decision. M1's set notation defines semantic
+  membership; it is not reused as the production byte-order rule. No field has
+  an author-approved unique sorting key in CCS-2.1-canonical-v1.
+- Encoding: the projection alone is encoded with RFC 8785/JCS as UTF-8. There
+  is no Unicode normalization, no insignificant whitespace, no implicit type
+  conversion, and no serialization of the full Capsule followed by a
+  blacklist.
+
+## M2-004 - Schema and package trust boundary
+
+- Date: 2026-08-02
+- Status: implemented; generic-validator limitation disclosed
+- Decision: publish eight Draft 2020-12 JSON Schema documents and make
+  `validate_capsule_document` the authoritative validation entry point. It
+  first applies the public structural Capsule Schema and then the strict
+  Python semantic pass for unique identifiers, reciprocal evidence bindings,
+  cross-references, signature-policy agreement, and lock/checksum equality.
+- Limitation: Draft 2020-12 cannot express every cross-record relation over
+  JSONL-derived arrays. A generic JSON Schema engine alone is structural and
+  may accept a document later rejected by the mandatory semantic pass. The
+  root Schema carries an explicit `x-contractcapsule-semantic-validation`
+  annotation; no raw-Schema equivalence claim is made.
+- Package carriers: the frozen package files remain required. Optional
+  `payload/metadata.json` and `evidence/metadata.json` carry only module-level
+  extension objects and are omitted without changing identity when those
+  objects are empty. They are not treated as new core modules. Unknown carrier
+  fields and undeclared files fail closed.
+- Evidence trust: bundled CAS bytes are rehashed; Git and external evidence
+  receive structural locator/digest validation without network access. The
+  loader returns no partial Capsule and performs no Registry or CAS mutation.
+- Local filesystem boundary: static symlinks, non-regular entries, traversal,
+  duplicate logical paths, and undeclared files are rejected. A concurrently
+  hostile process that mutates package directory entries during loading is not
+  claimed to be contained by M2; callers must supply a stable local snapshot.
+
+## M2-005 - CAS and Registry immutable publication semantics
+
+- Date: 2026-08-02
+- Status: implemented and tested; M2 human exit pending
+- CAS commit: payload bytes determine the digest. A canonical envelope stores
+  the digest, exact media type, and size. Same-filesystem temporary writes are
+  flushed, linked with no-replace semantics, directory-synced, and protected
+  by a per-digest advisory file lock so concurrent readers/writers cannot
+  observe a link whose durability check later fails. Existing bytes and media
+  type are always revalidated and never overwritten.
+- CAS authorization: a write creates no read grant. Direct CAS reads default
+  deny and require the authorizer to return the exact Boolean `True`; malformed
+  or truthy non-Boolean results deny. The published-reference read interface is
+  `Registry.get_blob`.
+- Registry tables: `publications` has a unique `(capsule_id, version)` key;
+  `evidence_references` has publication/evidence and publication/ordinal
+  uniqueness; `digest_grants` is foreign-keyed to a specific evidence row.
+  Foreign keys are enabled and no replace, public update, or public delete API
+  exists.
+- Publication transaction: strict model revalidation, authorization, and an
+  explicit `BEGIN IMMEDIATE` precede the private CAS integrity/media-type
+  check and insertion of the publication, evidence rows, and grants. A failure
+  rolls back all SQLite state. A previously written but unpublished CAS object
+  remains an unreadable orphan.
+- Authorization: Resolver decisions are type-checked and default deny.
+  Effective access is the intersection of a trusted Resolver decision and all
+  relevant Capsule access-policy constraints. A blob read succeeds through
+  the union of individually valid published references, with stored
+  publication, grant, digest, media type, and payload revalidation.
+- Republish: exact immutable replay reauthorizes, compares every persisted
+  publication/signature/evidence/grant field, returns the original timestamp,
+  and writes nothing. Same ID/version with a different digest is a version
+  conflict; any other immutable mismatch is a publication conflict.
+- Boundary: SQLite and filesystem CAS cannot form one cross-resource
+  transaction. M2 guarantees fail-closed Registry visibility and permits
+  unreadable orphan blobs; it does not provide deletion, revocation,
+  cross-tenant isolation, dynamic roles, distributed authorization, or
+  production signature verification.

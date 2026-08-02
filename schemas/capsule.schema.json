@@ -1,0 +1,1569 @@
+{
+  "$defs": {
+    "ActivationPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "approval_required": {
+          "title": "Approval Required",
+          "type": "boolean"
+        },
+        "risk": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ],
+          "title": "Risk",
+          "type": "string"
+        },
+        "safe_boundary": {
+          "const": "before-next-agent-action",
+          "title": "Safe Boundary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "risk",
+        "approval_required",
+        "safe_boundary"
+      ],
+      "title": "ActivationPolicy",
+      "type": "object"
+    },
+    "ArtifactChecksum": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "digest"
+      ],
+      "title": "ArtifactChecksum",
+      "type": "object"
+    },
+    "Atom": {
+      "additionalProperties": false,
+      "properties": {
+        "atom_id": {
+          "minLength": 1,
+          "title": "Atom Id",
+          "type": "string"
+        },
+        "authority": {
+          "minLength": 1,
+          "title": "Authority",
+          "type": "string"
+        },
+        "compression_class": {
+          "enum": [
+            "P0_EXACT",
+            "P1_STRUCTURED",
+            "P2_EVIDENCE",
+            "P3_SUMMARY",
+            "P4_TRANSIENT"
+          ],
+          "title": "Compression Class",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "conflicts_with": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Conflicts With",
+          "type": "array"
+        },
+        "evidence_refs": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "exceptions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Exceptions",
+          "type": "array"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "kind": {
+          "enum": [
+            "policy",
+            "invariant",
+            "fact",
+            "decision",
+            "procedure",
+            "interface",
+            "tool_contract",
+            "example",
+            "episodic_observation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "modality": {
+          "enum": [
+            "MUST",
+            "SHOULD",
+            "MAY",
+            "INFORMATIVE"
+          ],
+          "title": "Modality",
+          "type": "string"
+        },
+        "refresh_policy": {
+          "minLength": 1,
+          "title": "Refresh Policy",
+          "type": "string"
+        },
+        "requires_atoms": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Requires Atoms",
+          "type": "array"
+        },
+        "scope": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Scope",
+          "type": "array"
+        },
+        "sensitivity": {
+          "enum": [
+            "public",
+            "internal",
+            "confidential",
+            "restricted"
+          ],
+          "title": "Sensitivity",
+          "type": "string"
+        },
+        "statement": {
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "candidate",
+            "validated",
+            "deprecated",
+            "revoked"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "validity": {
+          "$ref": "#/$defs/Validity"
+        }
+      },
+      "required": [
+        "atom_id",
+        "kind",
+        "statement",
+        "modality",
+        "scope",
+        "exceptions",
+        "validity",
+        "authority",
+        "status",
+        "confidence",
+        "evidence_refs",
+        "requires_atoms",
+        "conflicts_with",
+        "sensitivity",
+        "compression_class",
+        "refresh_policy"
+      ],
+      "title": "Atom",
+      "type": "object"
+    },
+    "CASEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "access_policy": {
+          "minLength": 1,
+          "title": "Access Policy",
+          "type": "string"
+        },
+        "atom_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Atom Ids",
+          "type": "array"
+        },
+        "captured_at": {
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "evidence_id": {
+          "minLength": 1,
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "media_type": {
+          "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+\\-]+)*$",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "mode": {
+          "const": "CAS",
+          "title": "Mode",
+          "type": "string"
+        },
+        "retention": {
+          "minLength": 1,
+          "title": "Retention",
+          "type": "string"
+        },
+        "validation": {
+          "enum": [
+            "verified",
+            "stale",
+            "unavailable",
+            "revoked"
+          ],
+          "title": "Validation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "atom_ids",
+        "content_digest",
+        "media_type",
+        "captured_at",
+        "retention",
+        "access_policy",
+        "validation",
+        "mode"
+      ],
+      "title": "CASEvidence",
+      "type": "object"
+    },
+    "CapsuleDependency": {
+      "additionalProperties": false,
+      "properties": {
+        "capsule_id": {
+          "minLength": 1,
+          "title": "Capsule Id",
+          "type": "string"
+        },
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "capsule_id",
+        "version",
+        "digest"
+      ],
+      "title": "CapsuleDependency",
+      "type": "object"
+    },
+    "CompressionClassPolicy": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "name": {
+                "const": "P0_EXACT"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "then": {
+            "properties": {
+              "lossy_compression": {
+                "const": "forbidden"
+              },
+              "rendering": {
+                "const": "exact"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "expansion_triggers": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Expansion Triggers",
+          "type": "array"
+        },
+        "lossy_compression": {
+          "enum": [
+            "forbidden",
+            "validated_only",
+            "excerpt_only",
+            "allowed"
+          ],
+          "title": "Lossy Compression",
+          "type": "string"
+        },
+        "name": {
+          "enum": [
+            "P0_EXACT",
+            "P1_STRUCTURED",
+            "P2_EVIDENCE",
+            "P3_SUMMARY",
+            "P4_TRANSIENT"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "rendering": {
+          "minLength": 1,
+          "title": "Rendering",
+          "type": "string"
+        },
+        "ttl": {
+          "anyOf": [
+            {
+              "pattern": "^P[0-9]+D$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ttl"
+        }
+      },
+      "required": [
+        "name",
+        "rendering",
+        "lossy_compression",
+        "expansion_triggers",
+        "ttl"
+      ],
+      "title": "CompressionClassPolicy",
+      "type": "object"
+    },
+    "CompressionPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "classes": {
+          "allOf": [
+            {
+              "contains": {
+                "properties": {
+                  "name": {
+                    "const": "P0_EXACT"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              },
+              "maxContains": 1,
+              "minContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "name": {
+                    "const": "P1_STRUCTURED"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              },
+              "maxContains": 1,
+              "minContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "name": {
+                    "const": "P2_EVIDENCE"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              },
+              "maxContains": 1,
+              "minContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "name": {
+                    "const": "P3_SUMMARY"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              },
+              "maxContains": 1,
+              "minContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "name": {
+                    "const": "P4_TRANSIENT"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              },
+              "maxContains": 1,
+              "minContains": 1
+            }
+          ],
+          "items": {
+            "$ref": "#/$defs/CompressionClassPolicy"
+          },
+          "maxItems": 5,
+          "minItems": 5,
+          "title": "Classes",
+          "type": "array"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "policy_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Policy Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "policy_version",
+        "classes"
+      ],
+      "title": "CompressionPolicy",
+      "type": "object"
+    },
+    "ControlManifest": {
+      "additionalProperties": false,
+      "properties": {
+        "authority": {
+          "minLength": 1,
+          "title": "Authority",
+          "type": "string"
+        },
+        "canonical_profile": {
+          "const": "CCS-2.1-canonical-v1",
+          "title": "Canonical Profile",
+          "type": "string"
+        },
+        "capsule_id": {
+          "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+(?:-[a-z0-9]+)*$",
+          "title": "Capsule Id",
+          "type": "string"
+        },
+        "conflicts": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Conflicts",
+          "type": "array"
+        },
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "created_from": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Created From",
+          "type": "array"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "integrity": {
+          "$ref": "#/$defs/IntegrityReferences"
+        },
+        "lifecycle": {
+          "enum": [
+            "DRAFT",
+            "VALIDATED",
+            "PUBLISHED",
+            "ACTIVE",
+            "DEPRECATED",
+            "REVOKED"
+          ],
+          "title": "Lifecycle",
+          "type": "string"
+        },
+        "owner": {
+          "minLength": 1,
+          "title": "Owner",
+          "type": "string"
+        },
+        "provides": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Provides",
+          "type": "array"
+        },
+        "requires": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Requires",
+          "type": "array"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "sensitivity": {
+          "enum": [
+            "public",
+            "internal",
+            "confidential",
+            "restricted"
+          ],
+          "title": "Sensitivity",
+          "type": "string"
+        },
+        "spec_version": {
+          "const": "CCS-2.1",
+          "title": "Spec Version",
+          "type": "string"
+        },
+        "tenant": {
+          "minLength": 1,
+          "title": "Tenant",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "spec_version",
+        "canonical_profile",
+        "capsule_id",
+        "version",
+        "content_digest",
+        "owner",
+        "tenant",
+        "scope",
+        "authority",
+        "sensitivity",
+        "provides",
+        "requires",
+        "conflicts",
+        "lifecycle",
+        "created_from",
+        "integrity"
+      ],
+      "title": "ControlManifest",
+      "type": "object"
+    },
+    "DependencyEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "edge_type": {
+          "enum": [
+            "requires",
+            "provides",
+            "conflicts",
+            "replaces",
+            "optional"
+          ],
+          "title": "Edge Type",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "mandatory": {
+          "title": "Mandatory",
+          "type": "boolean"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        },
+        "version_constraint": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version Constraint"
+        }
+      },
+      "required": [
+        "source",
+        "target",
+        "edge_type",
+        "version_constraint",
+        "mandatory"
+      ],
+      "title": "DependencyEdge",
+      "type": "object"
+    },
+    "DependencyGraph": {
+      "additionalProperties": false,
+      "properties": {
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/DependencyEdge"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        }
+      },
+      "required": [
+        "edges"
+      ],
+      "title": "DependencyGraph",
+      "type": "object"
+    },
+    "DetachedSignature": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "minLength": 1,
+          "title": "Algorithm",
+          "type": "string"
+        },
+        "envelope": {
+          "additionalProperties": true,
+          "title": "Envelope",
+          "type": "object"
+        },
+        "key_id": {
+          "minLength": 1,
+          "title": "Key Id",
+          "type": "string"
+        },
+        "value": {
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "key_id",
+        "value",
+        "envelope"
+      ],
+      "title": "DetachedSignature",
+      "type": "object"
+    },
+    "EvidencePlane": {
+      "additionalProperties": false,
+      "properties": {
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "records": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "CAS": "#/$defs/CASEvidence",
+                "EXTERNAL_IMMUTABLE": "#/$defs/ExternalImmutableEvidence",
+                "GIT_IMMUTABLE": "#/$defs/GitImmutableEvidence"
+              },
+              "propertyName": "mode"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/CASEvidence"
+              },
+              {
+                "$ref": "#/$defs/GitImmutableEvidence"
+              },
+              {
+                "$ref": "#/$defs/ExternalImmutableEvidence"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Records",
+          "type": "array"
+        }
+      },
+      "required": [
+        "records"
+      ],
+      "title": "EvidencePlane",
+      "type": "object"
+    },
+    "ExternalImmutableEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "access_policy": {
+          "minLength": 1,
+          "title": "Access Policy",
+          "type": "string"
+        },
+        "atom_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Atom Ids",
+          "type": "array"
+        },
+        "captured_at": {
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "evidence_id": {
+          "minLength": 1,
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "media_type": {
+          "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+\\-]+)*$",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "mode": {
+          "const": "EXTERNAL_IMMUTABLE",
+          "title": "Mode",
+          "type": "string"
+        },
+        "retention": {
+          "minLength": 1,
+          "title": "Retention",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "uri": {
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "validation": {
+          "enum": [
+            "verified",
+            "stale",
+            "unavailable",
+            "revoked"
+          ],
+          "title": "Validation",
+          "type": "string"
+        },
+        "verification_method": {
+          "minLength": 1,
+          "title": "Verification Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "atom_ids",
+        "content_digest",
+        "media_type",
+        "captured_at",
+        "retention",
+        "access_policy",
+        "validation",
+        "mode",
+        "uri",
+        "source",
+        "verification_method"
+      ],
+      "title": "ExternalImmutableEvidence",
+      "type": "object"
+    },
+    "GitImmutableEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "access_policy": {
+          "minLength": 1,
+          "title": "Access Policy",
+          "type": "string"
+        },
+        "atom_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Atom Ids",
+          "type": "array"
+        },
+        "captured_at": {
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "evidence_id": {
+          "minLength": 1,
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "locator": {
+          "$ref": "#/$defs/GitLocator"
+        },
+        "media_type": {
+          "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+\\-]+)*$",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "mode": {
+          "const": "GIT_IMMUTABLE",
+          "title": "Mode",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "repository": {
+          "minLength": 1,
+          "title": "Repository",
+          "type": "string"
+        },
+        "retention": {
+          "minLength": 1,
+          "title": "Retention",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^(?:sha1:[0-9a-f]{40}|sha256:[0-9a-f]{64})$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "validation": {
+          "enum": [
+            "verified",
+            "stale",
+            "unavailable",
+            "revoked"
+          ],
+          "title": "Validation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "atom_ids",
+        "content_digest",
+        "media_type",
+        "captured_at",
+        "retention",
+        "access_policy",
+        "validation",
+        "mode",
+        "repository",
+        "revision",
+        "path",
+        "locator"
+      ],
+      "title": "GitImmutableEvidence",
+      "type": "object"
+    },
+    "GitLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "end_line": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "End Line",
+          "type": "integer"
+        },
+        "span_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Span Digest",
+          "type": "string"
+        },
+        "start_line": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Start Line",
+          "type": "integer"
+        },
+        "symbol_or_heading": {
+          "minLength": 1,
+          "title": "Symbol Or Heading",
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol_or_heading",
+        "start_line",
+        "end_line",
+        "span_digest"
+      ],
+      "title": "GitLocator",
+      "type": "object"
+    },
+    "IntegrityLock": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_versions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Adapter Versions",
+          "type": "array"
+        },
+        "capsule_dependencies": {
+          "items": {
+            "$ref": "#/$defs/CapsuleDependency"
+          },
+          "title": "Capsule Dependencies",
+          "type": "array"
+        },
+        "compiler_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Compiler Version",
+          "type": "string"
+        },
+        "compression_policy_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Compression Policy Version",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "model_series": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Model Series",
+          "type": "array"
+        },
+        "parameters": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Parameters",
+          "type": "array"
+        },
+        "runtime_config_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Runtime Config Digest",
+          "type": "string"
+        },
+        "source_commits": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Source Commits",
+          "type": "array"
+        },
+        "test_set_version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Test Set Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "capsule_dependencies",
+        "source_commits",
+        "compiler_version",
+        "adapter_versions",
+        "compression_policy_version",
+        "test_set_version",
+        "model_series",
+        "parameters",
+        "runtime_config_digest"
+      ],
+      "title": "IntegrityLock",
+      "type": "object"
+    },
+    "IntegrityReferences": {
+      "additionalProperties": false,
+      "properties": {
+        "lock": {
+          "minLength": 1,
+          "title": "Lock",
+          "type": "string"
+        },
+        "signature": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Signature"
+        }
+      },
+      "required": [
+        "lock",
+        "signature"
+      ],
+      "title": "IntegrityReferences",
+      "type": "object"
+    },
+    "ReplacementContract": {
+      "additionalProperties": false,
+      "properties": {
+        "activation": {
+          "$ref": "#/$defs/ActivationPolicy"
+        },
+        "allowed_scope": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Allowed Scope",
+          "type": "array"
+        },
+        "contract_id": {
+          "minLength": 1,
+          "title": "Contract Id",
+          "type": "string"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "forbidden_spillover": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Forbidden Spillover",
+          "type": "array"
+        },
+        "preconditions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Preconditions",
+          "type": "array"
+        },
+        "protected_invariants": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Protected Invariants",
+          "type": "array"
+        },
+        "replaces": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replaces"
+        },
+        "rollback": {
+          "$ref": "#/$defs/RollbackPolicy"
+        },
+        "target_effects": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Target Effects",
+          "type": "array"
+        },
+        "verification": {
+          "$ref": "#/$defs/VerificationCommands"
+        }
+      },
+      "required": [
+        "contract_id",
+        "replaces",
+        "preconditions",
+        "target_effects",
+        "protected_invariants",
+        "allowed_scope",
+        "forbidden_spillover",
+        "verification",
+        "activation",
+        "rollback"
+      ],
+      "title": "ReplacementContract",
+      "type": "object"
+    },
+    "RollbackPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "compensating_action": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Compensating Action"
+        },
+        "pointer": {
+          "minLength": 1,
+          "title": "Pointer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pointer",
+        "compensating_action"
+      ],
+      "title": "RollbackPolicy",
+      "type": "object"
+    },
+    "Scope": {
+      "additionalProperties": false,
+      "properties": {
+        "environments": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Environments",
+          "type": "array"
+        },
+        "paths": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Paths",
+          "type": "array"
+        },
+        "repositories": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Repositories",
+          "type": "array"
+        }
+      },
+      "required": [
+        "repositories",
+        "paths",
+        "environments"
+      ],
+      "title": "Scope",
+      "type": "object"
+    },
+    "SemanticPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "atoms": {
+          "items": {
+            "$ref": "#/$defs/Atom"
+          },
+          "minItems": 1,
+          "title": "Atoms",
+          "type": "array"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        }
+      },
+      "required": [
+        "atoms"
+      ],
+      "title": "SemanticPayload",
+      "type": "object"
+    },
+    "SignaturePolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "minLength": 1,
+          "title": "Algorithm",
+          "type": "string"
+        },
+        "input_profile": {
+          "const": "CCS-2.1-signature-v1",
+          "title": "Input Profile",
+          "type": "string"
+        },
+        "key_id": {
+          "minLength": 1,
+          "title": "Key Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "key_id",
+        "input_profile"
+      ],
+      "title": "SignaturePolicy",
+      "type": "object"
+    },
+    "TestDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "static",
+            "evidence",
+            "compression",
+            "behavioral"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "test_id": {
+          "minLength": 1,
+          "title": "Test Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "test_id",
+        "kind",
+        "path",
+        "digest"
+      ],
+      "title": "TestDefinition",
+      "type": "object"
+    },
+    "TestsIntegrity": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_checksums": {
+          "items": {
+            "$ref": "#/$defs/ArtifactChecksum"
+          },
+          "title": "Artifact Checksums",
+          "type": "array"
+        },
+        "extensions": {
+          "additionalProperties": true,
+          "propertyNames": {
+            "pattern": "^x-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": "Extensions",
+          "type": "object"
+        },
+        "lock": {
+          "$ref": "#/$defs/IntegrityLock"
+        },
+        "signature_policy": {
+          "$ref": "#/$defs/SignaturePolicy"
+        },
+        "tests": {
+          "items": {
+            "$ref": "#/$defs/TestDefinition"
+          },
+          "minItems": 1,
+          "title": "Tests",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tests",
+        "lock",
+        "artifact_checksums",
+        "signature_policy"
+      ],
+      "title": "TestsIntegrity",
+      "type": "object"
+    },
+    "Validity": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "title": "From",
+          "type": "string"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Until"
+        }
+      },
+      "required": [
+        "from",
+        "until"
+      ],
+      "title": "Validity",
+      "type": "object"
+    },
+    "VerificationCommands": {
+      "additionalProperties": false,
+      "properties": {
+        "behavioral": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Behavioral",
+          "type": "array"
+        },
+        "differential": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Differential",
+          "type": "array"
+        },
+        "static": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Static",
+          "type": "array"
+        }
+      },
+      "required": [
+        "static",
+        "behavioral",
+        "differential"
+      ],
+      "title": "VerificationCommands",
+      "type": "object"
+    }
+  },
+  "$id": "https://contractcapsule.example/schemas/capsule.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Seven A-zone modules plus explicitly non-identity envelope and sidecars.",
+  "properties": {
+    "compression_policy": {
+      "$ref": "#/$defs/CompressionPolicy"
+    },
+    "control_manifest": {
+      "$ref": "#/$defs/ControlManifest"
+    },
+    "dependency_graph": {
+      "$ref": "#/$defs/DependencyGraph"
+    },
+    "derived_artifacts": {
+      "additionalProperties": true,
+      "title": "Derived Artifacts",
+      "type": "object"
+    },
+    "detached_signature": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DetachedSignature"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "evidence_plane": {
+      "$ref": "#/$defs/EvidencePlane"
+    },
+    "replacement_contract": {
+      "$ref": "#/$defs/ReplacementContract"
+    },
+    "runtime_sidecar": {
+      "additionalProperties": true,
+      "title": "Runtime Sidecar",
+      "type": "object"
+    },
+    "semantic_payload": {
+      "$ref": "#/$defs/SemanticPayload"
+    },
+    "tests_integrity": {
+      "$ref": "#/$defs/TestsIntegrity"
+    }
+  },
+  "required": [
+    "control_manifest",
+    "semantic_payload",
+    "evidence_plane",
+    "dependency_graph",
+    "replacement_contract",
+    "compression_policy",
+    "tests_integrity"
+  ],
+  "title": "Capsule",
+  "type": "object",
+  "x-contractcapsule-semantic-validation": "contractcapsule.models.schema.validate_capsule_document"
+}
