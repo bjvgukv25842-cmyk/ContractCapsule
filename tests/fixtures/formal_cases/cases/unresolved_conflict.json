@@ -1,0 +1,46 @@
+{
+  "name": "unresolved conflict",
+  "description": "Two selected authentication strategies conflict and the conflict remains visible while activation is blocked.",
+  "principal": "alice",
+  "adapter": "reference-agent/v1",
+  "budget": 10,
+  "safe_boundary": true,
+  "task": {
+    "task_id": "replace-auth-strategy",
+    "required_interfaces": ["auth/v2"],
+    "irreversible_external_action": false,
+    "preflight_completed": false,
+    "approval_granted": false,
+    "compensation_available": false
+  },
+  "old": {
+    "manifest": {"reference": "auth-policy@1", "authorized_principals": ["alice"], "provides": ["auth/v1"]},
+    "atoms": [{"id": "auth.legacy", "statement": "Use the legacy authentication strategy.", "compression_class": "P1_STRUCTURED", "token_cost": 2, "relevance": 1, "evidence_refs": ["ev-old-policy"]}],
+    "evidence": [{"id": "ev-old-policy", "digest": "sha256:old-policy", "exact_text": "The legacy strategy is active.", "fresh": true}],
+    "graph": {"requires": [], "conflicts": []},
+    "replacement_contract": {"replaces": null, "accepts_interfaces": [], "target_effects_passed": true, "protected_invariants_passed": true, "forbidden_spillover_detected": false},
+    "compression_policy": {"p0_exact": true},
+    "integrity": {"valid": true}
+  },
+  "candidate": {
+    "manifest": {"reference": "auth-policy@2", "authorized_principals": ["alice"], "provides": ["auth/v2"]},
+    "atoms": [
+      {"id": "auth.jwt-only", "statement": "Use JWT authentication only.", "compression_class": "P1_STRUCTURED", "token_cost": 3, "relevance": 100, "evidence_refs": ["ev-jwt"]},
+      {"id": "auth.session-only", "statement": "Use session authentication only.", "compression_class": "P1_STRUCTURED", "token_cost": 3, "relevance": 90, "evidence_refs": ["ev-session"]}
+    ],
+    "evidence": [
+      {"id": "ev-jwt", "digest": "sha256:jwt", "exact_text": "JWT is the sole authentication mechanism.", "fresh": true},
+      {"id": "ev-session", "digest": "sha256:session", "exact_text": "Sessions are the sole authentication mechanism.", "fresh": true}
+    ],
+    "graph": {"requires": [], "conflicts": [["auth.jwt-only", "auth.session-only"]]},
+    "replacement_contract": {"replaces": "auth-policy@1", "accepts_interfaces": ["auth/v1"], "target_effects_passed": true, "protected_invariants_passed": true, "forbidden_spillover_detected": false},
+    "compression_policy": {"p0_exact": true},
+    "integrity": {"valid": true}
+  },
+  "expected": {
+    "activation": false,
+    "active_capsule": "auth-policy@1",
+    "blocker": "UNRESOLVED_CONFLICT",
+    "rollback": false
+  }
+}
