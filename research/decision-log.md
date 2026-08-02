@@ -480,3 +480,20 @@
   unreadable orphan blobs; it does not provide deletion, revocation,
   cross-tenant isolation, dynamic roles, distributed authorization, or
   production signature verification.
+
+## M2-006 - Verified M2 technical commit
+
+- Date: 2026-08-02
+- Status: technical work complete; human exit pending
+- Commit: `fac9522a4abd7da85a794b5fcbf59ec012259b8b`.
+- Message: `feat: implement M2 canonical storage core`.
+- Verification before commit: 172 M2 model/loader/CAS/Registry/property tests,
+  30 M1 formal tests, and 206 cumulative tests passed. Ruff, mypy, uv lock,
+  extended complexity, Schema consistency, frozen-hash, literature/JSONL
+  structure, whitespace, and tracked-artifact checks passed.
+- Audit note: the first one-line literature and JSONL parser commands had
+  shell/Python quoting errors and exited 1. Corrected commands exited 0; no
+  record was changed by the failed commands. Both failures remain disclosed in
+  the M2 report.
+- Boundary: this local commit was not pushed, merged, or used to start M3.
+  Unit/property/formal tests are engineering evidence, not empirical results.
