@@ -1,12 +1,14 @@
 # ContractCapsule Research Protocol
 
-Protocol ID: `CCS-FSE27-M1-G0-candidate-2026-08-01`
+Protocol ID: `CCS-FSE27-M1-G0-approved-2026-08-02`
 
-Status: M1 protocol candidate frozen for G0 author review. M0 closed by human
-approval on 2026-08-01. No M2-M11 work or full experiment is authorized by
-this document. After G0 approval, changes require a dated amendment that states
-the reason, affected outcomes, and whether any pilot or full-study data existed
-when the change was made. The prior version remains auditable.
+Status: author-approved at G0 on 2026-08-02 and frozen before any formal
+experiment. M0 closed by human approval on 2026-08-01. No M2-M11 work or full
+experiment is authorized by this document. This local Git record is not a
+public external preregistration and has not been deposited with an independent
+timestamped registration platform. Changes require a dated amendment that
+states the reason, affected outcomes, and whether any pilot or full-study data
+existed when the change was made. The prior version remains auditable.
 
 ## Normative Inputs
 
@@ -46,6 +48,12 @@ submission.
 The thesis is that coding-agent project context can be represented as
 immutable, source-grounded, contract-bearing replacement units whose
 task-specific views and behavioral substitutions can be audited and validated.
+
+The author-approved core claim is limited to a versioned project-context
+replacement mechanism for coding agents that carries immutable evidence and
+dependency closure, is validated by behavioral contracts, and supports atomic
+activation and safe rollback. This approval does not establish C2-C5,
+measured TER/PIP/BSR, baseline superiority, or cross-agent generality.
 
 The paper does not claim novelty for typed atoms, compression, retrieval,
 provenance, memory tiers, packaging, Skill, MCP, or agent integration alone.
@@ -135,9 +143,9 @@ necessary?
 
 Primary outcomes:
 
-- direction and magnitude of CC-versus-baseline effects on the preregistered
+- direction and magnitude of CC-versus-baseline effects on the pre-specified
   RQ1 and RQ3 outcomes in the stratified Claude Code replication; and
-- change in TER, PIP, and BSR for each preregistered ablation relative to full
+- change in TER, PIP, and BSR for each pre-specified ablation relative to full
   ContractCapsule.
 
 Secondary outcomes:
@@ -281,7 +289,7 @@ All analysis is script-generated from checksum-verified raw records.
    summaries, report median and mean paired differences with task-cluster
    bootstrap 95% confidence intervals. The default null test is a two-sided
    paired permutation test over task-level differences.
-5. A Wilcoxon signed-rank analysis may be reported only as a preregistered
+5. A Wilcoxon signed-rank analysis may be reported only as a pre-specified
    sensitivity analysis when at least ten non-zero task pairs exist and its
    ordinal/symmetry interpretation is stated. It never replaces the default
    because of a favorable p-value.
@@ -367,5 +375,5 @@ must be removed or normalized from the anonymous M11 artifact.
 | Submission conflicts | Confirmed by author: no known submission conflicts |
 | Current non-human-participant ethics scope | Confirmed by author; reopen triggers retained |
 | M0 technical and governance exit gate | Approved and closed |
-| M1 G0 novelty and protocol freeze | Pending author review |
+| M1 G0 novelty and protocol freeze | APPROVED TO PROCEED with bounded scope, 2026-08-02 |
 | Repository license and citation metadata | Later author decision; not an M1 G0 condition |

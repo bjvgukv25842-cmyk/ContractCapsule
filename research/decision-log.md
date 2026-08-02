@@ -227,7 +227,7 @@
   were checked; it is not a judgment that every source is peer reviewed. arXiv
   works and official documentation are labeled as such.
 
-## M1-006 - Preregistered analysis protocol
+## M1-006 - Analysis protocol frozen before formal experiments
 
 - Date: 2026-08-01
 - Status: frozen candidate pending G0 author approval
@@ -237,7 +237,7 @@
   any full experiment.
 - Statistics: task-level paired aggregation, task-cluster bootstrap intervals,
   exact McNemar for paired binary outcomes, paired permutation tests for
-  numeric/rate outcomes, preregistered Wilcoxon sensitivity conditions, effect
+  numeric/rate outcomes, pre-specified Wilcoxon sensitivity conditions, effect
   sizes, and Holm correction within RQ families.
 - Boundary: M8 may freeze draw counts after runtime preflight but cannot select
   tests or outcomes from favorable directions. Protocol amendments are
@@ -256,3 +256,31 @@
   only on a product description; related-work rows are source-verified.
 - Limitation: this is formal and protocol evidence, not a claim that C2-C5 or
   any empirical RQ already succeeds. M2 remains blocked until author approval.
+
+## M1-008 - Restricted G0 author approval
+
+- Date: 2026-08-02
+- Status: APPROVED TO PROCEED
+- Decision: the author approved the G0 novelty stop gate on the strength of the
+  formal replacement definition, separately measurable TER/PIP/BSR,
+  evidence preservation, mandatory dependency closure, conflict visibility,
+  interface compatibility, atomic activation, safe rollback, and the ten
+  executable formal cases.
+- Approved claim boundary: “面向 Coding Agent 的、带不可变证据与依赖闭包、由行为契约验证、支持原子激活和安全回滚的版本化项目上下文替换机制。”
+- Explicit non-results: this decision does not establish C2-C5, observed
+  TER/PIP/BSR, superiority over a baseline, cross-agent generality, or removal
+  of the Context Codec overlap risk.
+- Novelty exclusions: typed atoms, canonical identity, conflicts, evidence
+  spans, provenance, compression verification, RAG, Skill, and MCP are not
+  standalone contributions.
+- Related-work risk: Context Codec remains the highest-overlap neighboring
+  work and must remain marked high risk.
+- Registration boundary: `research/protocol.md` is an analysis protocol frozen
+  before formal experiments. Local Git history is not described as a public
+  external preregistration because no independent timestamped registration
+  platform has been recorded.
+- Privacy boundary: tracked files record the decision status and scope only;
+  no author identity, email, or detailed conflict information is added.
+- Integration: the author selected Option 1, local merge into the uniquely
+  verified baseline branch after all required checks pass. No pull, push, PR,
+  or M2 work is authorized by this decision.
