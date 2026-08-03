@@ -497,3 +497,61 @@
   the M2 report.
 - Boundary: this local commit was not pushed, merged, or used to start M3.
   Unit/property/formal tests are engineering evidence, not empirical results.
+
+## M2-007 - Author-audit Schema parity remediation
+
+- Date: 2026-08-03
+- Status: **M2 IMPLEMENTATION CONDITIONAL PASS**; remediation implemented and
+  independently reviewed; M2 exit not formally approved
+- Audit baseline: the author audit evaluated starting HEAD
+  `78eb719f6ca5dd9b97eb964e6f54a17aa34e028c`, authorized remediation of the
+  local static Schema/Python assertion mismatch, and did not authorize M3.
+- Finding boundary: the original public `load_capsule()` path remained
+  fail-closed. The blocker was static JSON Schema accepting local values that
+  the existing Python validation rejected, not a public loader bypass.
+- Implementation commit:
+  `3b3cb870a05c1af7458268f66da37a9fc5e9474f`. The remediation tightens the
+  generated Schema acceptance surface to match existing Python semantics; it
+  does not relax Python or change canonical identity, CAS, Registry,
+  authorization, exact republish, or any Evidence mode.
+- Authorized constraints: add `minItems: 1` for `Atom.scope`,
+  `ReplacementContract.target_effects`, and `protected_invariants`; emit an
+  ECMA-safe exact Git-path pattern matching the Python safe-relative rules; and
+  emit HTTPS/DOI/URN URI lexical families compatible with Python `urlsplit`
+  scheme normalization and portable DOI/URN Unicode whitespace semantics.
+- Git-path boundary: reject empty and absolute paths, leading drive prefixes,
+  backslashes, NUL, empty segments (`//` or trailing `/`), and literal `.` or
+  `..` segments in leading or interior positions.
+- URI boundary: static Schema checks the HTTPS/DOI/URN lexical family. The
+  authoritative Python semantic pass retains application-level parsing,
+  including canonical HTTPS host/netloc, credentials, port, query, fragment,
+  percent, slash, and dot-segment rules. Raw Schema is not claimed equivalent
+  to the full Python validator.
+- Schema generation: all eight Schema artifacts regenerated deterministically;
+  four changed (`capsule`, `evidence-plane`, `replacement-contract`, and
+  `semantic-payload`) and four remained byte-identical.
+- Loader regression: persistent raw-byte public `load_capsule()` tests reject
+  `NaN`, `Infinity`, and `-Infinity` at the strict parser boundary.
+- TDD Red evidence: the initial focused run exited 1 with 13 failed and 16
+  passed; Git newline exact-anchor exited 1 with 2 failed and 26 deselected;
+  HTTPS normalization exited 1 with 3 failed and 28 deselected; URI portability
+  exited 1 with 4 failed and 39 deselected; URI trailing newline exited 1 with
+  2 failed, 6 passed, and 35 deselected. A mistyped `-k newline_text` selected
+  zero tests and exited 5; it changed no data and remains recorded as a command
+  error.
+- Green evidence at the remediation commit: 218 M2 tests passed (models 72,
+  loader 57, Schema parity 43, CAS 18, Registry 22, property 6); targeted
+  Schema tests passed 45; M1 formal tests passed 30; M0 locks passed 4; the
+  full suite passed 252 = 218 + 30 + 4. Final runs had no skip, xfail, or
+  deselection. Ruff, mypy over 24 source files, the 38-package lock check,
+  complexity, whitespace, and both frozen hashes all passed with Exit 0.
+- Review: independent specification and code-quality reviews approved the
+  technical remediation after two review/fix loops. AI-assisted review does
+  not substitute for author gate approval.
+- Unchanged governed inputs: CCS-2.1, the frozen execution plan,
+  `research/protocol.md`, dependency declarations, and `uv.lock` are unchanged.
+- Claim boundary: C2-C5 empirical evidence, TER/PIP/BSR observations, baseline
+  advantage, and cross-agent generality remain absent. Context Codec remains
+  high overlap.
+- Pending decision: the author must formally reapprove or reject the M2 exit
+  gate. M3 remains unauthorized and has not started.
