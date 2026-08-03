@@ -157,6 +157,7 @@
             "minLength": 1,
             "type": "string"
           },
+          "minItems": 1,
           "title": "Scope",
           "type": "array"
         },
@@ -861,6 +862,17 @@
           "type": "string"
         },
         "uri": {
+          "anyOf": [
+            {
+              "pattern": "^[\\u0000-\\u0020]*[Hh][\\t\\r\\n]*[Tt][\\t\\r\\n]*[Tt][\\t\\r\\n]*[Pp][\\t\\r\\n]*[Ss][\\t\\r\\n]*:[\\t\\r\\n]*/[\\t\\r\\n]*/"
+            },
+            {
+              "pattern": "^doi:10\\.[0-9]{4,9}/[^\\u0009-\\u000D\\u001C-\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]+$(?![\\u000A\\u000D\\u2028\\u2029])"
+            },
+            {
+              "pattern": "^urn:[a-z0-9][a-z0-9-]{0,31}:[^\\u0009-\\u000D\\u001C-\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]+$(?![\\u000A\\u000D\\u2028\\u2029])"
+            }
+          ],
           "minLength": 1,
           "title": "Uri",
           "type": "string"
@@ -953,6 +965,7 @@
         },
         "path": {
           "minLength": 1,
+          "pattern": "^(?![A-Za-z]:)(?!\\.{1,2}(?:/|$(?![\\s\\S])))[^/\\\\\\u0000]+(?:/(?!\\.{1,2}(?:/|$(?![\\s\\S])))[^/\\\\\\u0000]+)*$(?![\\s\\S])",
           "title": "Path",
           "type": "string"
         },
@@ -1196,6 +1209,7 @@
             "minLength": 1,
             "type": "string"
           },
+          "minItems": 1,
           "title": "Protected Invariants",
           "type": "array"
         },
@@ -1219,6 +1233,7 @@
             "minLength": 1,
             "type": "string"
           },
+          "minItems": 1,
           "title": "Target Effects",
           "type": "array"
         },

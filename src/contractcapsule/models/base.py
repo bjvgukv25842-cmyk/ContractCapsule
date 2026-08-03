@@ -38,6 +38,12 @@ MEDIA_TYPE_PATTERN = (
     r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+"
     r"(?:;[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+\-]+)*$"
 )
+SAFE_RELATIVE_PATH_PATTERN = (
+    r"^(?![A-Za-z]:)(?!\.{1,2}(?:/|$(?![\s\S])))"
+    r"[^/\\\u0000]+"
+    r"(?:/(?!\.{1,2}(?:/|$(?![\s\S])))[^/\\\u0000]+)*"
+    r"$(?![\s\S])"
+)
 EXTENSION_PATTERN = re.compile(r"^x-[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 def _valid_date(value: str) -> str:

@@ -153,6 +153,29 @@ def test_duplicate_json_key_is_rejected_before_model_validation(tmp_path: Path) 
         load_capsule(package)
 
 
+@pytest.mark.parametrize("raw_token", ["NaN", "Infinity", "-Infinity"])
+def test_non_finite_json_tokens_are_rejected_by_strict_package_parser(
+    tmp_path: Path, raw_token: str
+) -> None:
+    package, _ = write_package(tmp_path)
+    manifest = package / "manifest.json"
+    raw = manifest.read_bytes()
+    marker = b'"x-policy-tier": "critical"'
+    assert marker in raw
+    manifest.write_bytes(
+        raw.replace(
+            marker,
+            b'"x-policy-tier": ' + raw_token.encode("ascii"),
+            1,
+        )
+    )
+
+    with pytest.raises(CapsuleLoadError) as error:
+        load_capsule(package)
+
+    assert str(error.value) == f"non-finite JSON number is forbidden: {raw_token}"
+
+
 def test_invalid_utf8_and_lone_surrogate_are_rejected(tmp_path: Path) -> None:
     package, _ = write_package(tmp_path)
     (package / "manifest.json").write_bytes(b'{"bad":"\xff"}')

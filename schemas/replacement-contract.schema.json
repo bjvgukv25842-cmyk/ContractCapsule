@@ -145,6 +145,7 @@
         "minLength": 1,
         "type": "string"
       },
+      "minItems": 1,
       "title": "Protected Invariants",
       "type": "array"
     },
@@ -168,6 +169,7 @@
         "minLength": 1,
         "type": "string"
       },
+      "minItems": 1,
       "title": "Target Effects",
       "type": "array"
     },

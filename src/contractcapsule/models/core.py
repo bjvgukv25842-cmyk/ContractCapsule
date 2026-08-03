@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from contractcapsule.models.base import (
+    SAFE_RELATIVE_PATH_PATTERN,
     DateString,
     Digest,
     ExtensibleModel,
@@ -28,6 +29,35 @@ from contractcapsule.models.base import (
     is_safe_relative_path,
     thaw_json,
 )
+
+PYTHON_RE_NON_WHITESPACE_SCHEMA_ATOM = (
+    r"[^\u0009-\u000D\u001C-\u0020\u0085\u00A0\u1680"
+    r"\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]"
+)
+SCHEMA_ABSOLUTE_END_ASSERTION = r"$(?![\u000A\u000D\u2028\u2029])"
+DOI_URI_SCHEMA_PATTERN = (
+    r"^doi:10\.[0-9]{4,9}/"
+    f"{PYTHON_RE_NON_WHITESPACE_SCHEMA_ATOM}+"
+    f"{SCHEMA_ABSOLUTE_END_ASSERTION}"
+)
+URN_URI_SCHEMA_PATTERN = (
+    r"^urn:[a-z0-9][a-z0-9-]{0,31}:"
+    f"{PYTHON_RE_NON_WHITESPACE_SCHEMA_ATOM}+"
+    f"{SCHEMA_ABSOLUTE_END_ASSERTION}"
+)
+HTTPS_URI_SCHEMA_PATTERN = (
+    r"^[\u0000-\u0020]*"
+    r"[Hh][\t\r\n]*[Tt][\t\r\n]*[Tt][\t\r\n]*"
+    r"[Pp][\t\r\n]*[Ss][\t\r\n]*:"
+    r"[\t\r\n]*/[\t\r\n]*/"
+)
+EXTERNAL_URI_LEXICAL_SCHEMA: dict[str, Any] = {
+    "anyOf": [
+        {"pattern": HTTPS_URI_SCHEMA_PATTERN},
+        {"pattern": DOI_URI_SCHEMA_PATTERN},
+        {"pattern": URN_URI_SCHEMA_PATTERN},
+    ]
+}
 
 
 class Scope(StrictFrozenModel):
@@ -112,7 +142,7 @@ class Atom(ExtensibleModel):
     ]
     statement: NonEmptyString
     modality: Literal["MUST", "SHOULD", "MAY", "INFORMATIVE"]
-    scope: tuple[NonEmptyString, ...]
+    scope: Annotated[tuple[NonEmptyString, ...], Field(min_length=1)]
     exceptions: tuple[NonEmptyString, ...]
     validity: Validity
     authority: NonEmptyString
@@ -190,7 +220,9 @@ class GitImmutableEvidence(EvidenceBase):
         str,
         Field(pattern=r"^(?:sha1:[0-9a-f]{40}|sha256:[0-9a-f]{64})$"),
     ]
-    path: NonEmptyString
+    path: NonEmptyString = Field(
+        json_schema_extra={"pattern": SAFE_RELATIVE_PATH_PATTERN}
+    )
     locator: GitLocator
 
     @field_validator("repository")
@@ -210,7 +242,7 @@ class GitImmutableEvidence(EvidenceBase):
 
 class ExternalImmutableEvidence(EvidenceBase):
     mode: Literal["EXTERNAL_IMMUTABLE"]
-    uri: NonEmptyString
+    uri: NonEmptyString = Field(json_schema_extra=EXTERNAL_URI_LEXICAL_SCHEMA)
     source: NonEmptyString
     verification_method: NonEmptyString
 
@@ -280,8 +312,10 @@ class ReplacementContract(ExtensibleModel):
     contract_id: NonEmptyString
     replaces: NonEmptyString | None
     preconditions: tuple[NonEmptyString, ...]
-    target_effects: tuple[NonEmptyString, ...]
-    protected_invariants: tuple[NonEmptyString, ...]
+    target_effects: Annotated[tuple[NonEmptyString, ...], Field(min_length=1)]
+    protected_invariants: Annotated[
+        tuple[NonEmptyString, ...], Field(min_length=1)
+    ]
     allowed_scope: tuple[NonEmptyString, ...]
     forbidden_spillover: tuple[NonEmptyString, ...]
     verification: VerificationCommands
