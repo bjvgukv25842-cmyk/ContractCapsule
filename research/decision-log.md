@@ -555,3 +555,26 @@
   high overlap.
 - Pending decision: the author must formally reapprove or reject the M2 exit
   gate. M3 remains unauthorized and has not started.
+
+## M2-008 - M2 remediation accepted and exit gate approved
+
+- Date: 2026-08-03
+- Status: **M2 REMEDIATION ACCEPTED; M2 EXIT GATE FORMALLY APPROVED**
+- Approved HEAD: `eec2c1fd173748f181dc8b672b3be320035426a8`.
+- Decision: the author accepted the local Schema/Python parity remediation and
+  the final verification evidence, including the 252-test cumulative suite,
+  static and structural checks, frozen-digest verification, and independent
+  specification and quality reviews.
+- Accepted engineering scope: non-empty `Atom.scope` and replacement target
+  effects in module/root Schema; ECMA-262-compatible Git relative-path lexical
+  assertions with Python defense in depth; portable external-URI lexical
+  assertions plus mandatory Python URI semantics; and raw-byte public-loader
+  rejection of `NaN`, `Infinity`, and `-Infinity`.
+- Claim boundary: approval closes the M2 engineering gate only. It establishes
+  no C2-C5 empirical result, TER/PIP/BSR observation, baseline advantage, or
+  cross-agent generality. Context Codec remains a high-overlap neighbor.
+- Immutability boundary: this governance decision does not alter CCS-2.1, the
+  frozen execution plan, `research/protocol.md`, implementation code, Schema,
+  tests, dependencies, or `uv.lock`.
+- Next-module boundary: M3 is not authorized by this approval and has not
+  started. A separate author instruction is required before M3 work.
