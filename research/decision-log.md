@@ -578,3 +578,41 @@
   tests, dependencies, or `uv.lock`.
 - Next-module boundary: M3 is not authorized by this approval and has not
   started. A separate author instruction is required before M3 work.
+
+## M3-001 - Early start authorization and unchanged semantic scope
+
+- Date: 2026-08-09
+- Status: implementation authorized; M3 human exit gate pending
+- Baseline: `a0dc9c72b210e41699aad6377a21642cac75abf0` on the isolated
+  `codex/m3-builder` worktree.
+- The author authorized M3 before the frozen 2026-08-13--2026-08-16 window.
+  This is recorded as **schedule acceleration without semantic scope change**.
+- The authorization covers only source ingestion, deterministic atomization,
+  source-map/evidence binding, trust classification, quarantine/promotion, and
+  the M2-backed build/load/publish path. M4 eligibility, ranking, dependency
+  closure, conflict resolution, and view compilation remain unauthorized.
+- CCS-2.1, the frozen execution plan, and the frozen research protocol remain
+  read-only. No protocol or identity-semantics revision was needed.
+
+## M3-002 - Source-grounded trust boundary implementation
+
+- Date: 2026-08-09
+- Status: technical implementation complete; author review pending
+- Technical commit: `232b475ce302e06e9292362ffb12e530a5672548`.
+- Implemented deterministic source snapshots and parsers, immutable Git/CAS/
+  external evidence bindings, source-drift checks, secret scanning before
+  storage/rendering, T3 quarantine for generated candidates, externally
+  verified approval promotion, and a public-loader/M2 Registry publication
+  boundary.
+- The approval adapter is explicitly a local HMAC test/research trust adapter;
+  it is not a production signature-security result. Git and external evidence
+  are checked offline and are not remotely fetched.
+- Verification: focused M3 suite 28 passed; cumulative suite 280 passed;
+  M1 formal cases 30 passed; Ruff, mypy, lock, complexity, whitespace, and
+  frozen-hash checks passed with Exit 0. No skip, xfail, or deselected test was
+  used.
+- Research boundary: this is engineering evidence for source fidelity and
+  trust gating only. It does not add C2-C5 empirical results, TER, PIP, BSR,
+  baseline advantage, or cross-Agent generality.
+- Human validation state remains pending; the technical commit was not pushed,
+  merged, or used to start M4.
