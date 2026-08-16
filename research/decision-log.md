@@ -665,3 +665,21 @@
   no-proof P0/P1 rejection and trusted positive publication remain persistent.
 - No frozen baseline, protocol, dependency, lock, or M2 production bypass was
   changed. M3 remains pending author review; M4 has not started.
+
+## M3-005 - Final remediation verification
+
+- Date: 2026-08-16
+- Status: **M3 REMEDIATION COMPLETE -- EXIT CANDIDATE PENDING AUTHOR REVIEW**
+- Technical HEAD: `3352147c39be3f989d1370fbaa26f5b0ad0fba8d`.
+- Governance HEAD checked: `5fe30acb6360f993ca64c8de5c6f680f5006ad81`.
+- Verification: Registry 22, property 6, direct negative/positive gate 3,
+  M3 integration/security 65, M2 218, M1 formal 30, M0 lock 4, and cumulative
+  317 tests passed. Ruff, mypy, 38-package lock, extended complexity,
+  governance/JSONL structure, prompt-summary hashes, whitespace, protected
+  inputs, ancestry, and both frozen digests passed.
+- Test accounting is disjoint: `218 + 30 + 4 + 65 = 317`. No skip, xfail, or
+  deselected case was used.
+- Claim boundary: this closes the authorized technical remediation only. It
+  supplies no C2--C5 empirical result, TER/PIP/BSR observation, baseline
+  advantage, or cross-Agent generality. M3 human approval is still pending;
+  M4 has not started and remains unauthorized.
