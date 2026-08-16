@@ -616,3 +616,52 @@
   baseline advantage, or cross-Agent generality.
 - Human validation state remains pending; the technical commit was not pushed,
   merged, or used to start M4.
+
+## M3-003 - Read-only exit audit failure and root-cause remediation
+
+- Date: 2026-08-16
+- Status: **M3 READ-ONLY AUDIT FAIL ACCEPTED; ROOT-CAUSE REMEDIATION COMPLETE;
+  HUMAN EXIT PENDING**
+- Audit target: `fbe4ee112809c0de92acdb3a525d0d7a56bb4aa0`.
+- Root cause: build-time quarantine/approval checks were not a mandatory,
+  authoritative policy gate for every public P0/P1 publication path. Direct
+  `Registry.publish()` could establish a structurally valid publication without
+  the M3 Evidence/approval proof.
+- Decision: every fresh P0/P1 publication, including marker-stripped input,
+  must cross one Registry-enforced gate. The configured trust root is immutable
+  service-composition state; authorization, loader/package, CAS, candidate,
+  Evidence, source, approval, expiry, scanner, and lifecycle conditions are
+  rechecked inside the Registry write transaction before insertion.
+- Trusted source boundary: `generated=False` is non-authoritative. Public
+  ingestion remains T3. T2 requires an explicitly composed deterministic Git
+  collector bound to the same trust root, immutable repository/commit/path,
+  parser profile, snapshot, and content digest.
+- Technical commit: `3352147c39be3f989d1370fbaa26f5b0ad0fba8d`
+  (`fix: enforce M3 publication trust gate`).
+- Claim boundary: the original M3 exit-candidate conclusion was overturned and
+  remains preserved as history. The remediation is engineering evidence only;
+  M3 human approval is pending and M4 remains unauthorized.
+
+## M3-004 - Author-authorized M2 test-contract migration
+
+- Date: 2026-08-16
+- Status: migration complete; M3 human exit pending
+- Frozen-semantic determination: CCS-2.1 and the M2/M3 frozen plan require
+  canonical identity, CAS integrity, lifecycle, Principal authorization, and
+  immutable Registry behavior, but do not promise that a fresh P0/P1 version
+  remains publishable without M3 proof after the M3 trust gate exists. The 17
+  failures all shared that pre-M3 fixture setup; none represented a distinct
+  frozen semantic conflict.
+- Author decision: migrate only the publication setup to the actual trusted M3
+  path. Do not add a legacy production bypass, lower P0/P1 to P2, construct
+  trust artifacts manually, reduce Hypothesis generation, or alter the original
+  Registry/CAS/lifecycle/Principal/immutability assertions.
+- Preserved evidence: the strict gate first produced `299 passed, 17 failed`;
+  the existing M3 remediation checkpoint produced `55 passed`. The 17 failures
+  are compatibility Red evidence, not the original security-test Red.
+- Test implementation: the isolated `TrustedM3TestHarness` executes source
+  snapshot, Evidence binding, trusted test-root approval, promotion, package
+  build/public loader, permit issuance, and Registry final validation. Direct
+  no-proof P0/P1 rejection and trusted positive publication remain persistent.
+- No frozen baseline, protocol, dependency, lock, or M2 production bypass was
+  changed. M3 remains pending author review; M4 has not started.
