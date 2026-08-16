@@ -168,7 +168,7 @@ def _candidate_id(snapshot: SourceSnapshot, span: _ExtractedSpan) -> str:
 def extract_candidate_atoms(snapshot: SourceSnapshot) -> list[CandidateAtom]:
     """Extract deterministic candidates and register every one in quarantine."""
 
-    if not isinstance(snapshot, SourceSnapshot):
+    if type(snapshot) is not SourceSnapshot:
         raise TypeError("snapshot must be a SourceSnapshot")
     if not snapshot.quarantine.is_registered_snapshot(snapshot):
         raise QuarantineError("snapshot did not pass the ingestion boundary")
@@ -177,7 +177,12 @@ def extract_candidate_atoms(snapshot: SourceSnapshot) -> list[CandidateAtom]:
     if not spans:
         raise QuarantineError("source produced no deterministic candidate atoms")
     candidates: list[CandidateAtom] = []
-    source_trust = TrustLevel.T3 if snapshot.generated else TrustLevel.T2
+    source_trust = (
+        TrustLevel.T2
+        if snapshot.quarantine.has_deterministic_source_proof(snapshot)
+        and not snapshot.generated
+        else TrustLevel.T3
+    )
     for span in spans:
         candidate_id = _candidate_id(snapshot, span)
         candidate = CandidateAtom(
@@ -196,7 +201,7 @@ def extract_candidate_atoms(snapshot: SourceSnapshot) -> list[CandidateAtom]:
             trust_level=source_trust,
         )
         object.__setattr__(
-            candidate, "_quarantine_token", snapshot.quarantine.candidate_token()
+            candidate, "_quarantine_token", snapshot.quarantine._candidate_capability()
         )
         snapshot.quarantine.register_candidate(candidate)
         candidates.append(candidate)
@@ -206,7 +211,7 @@ def extract_candidate_atoms(snapshot: SourceSnapshot) -> list[CandidateAtom]:
 def bind_evidence(atom: CandidateAtom, snapshot: SourceSnapshot) -> EvidenceBinding:
     """Bind a registered candidate to exact source bytes after drift/secret checks."""
 
-    if not isinstance(atom, CandidateAtom) or not isinstance(snapshot, SourceSnapshot):
+    if type(atom) is not CandidateAtom or type(snapshot) is not SourceSnapshot:
         raise TypeError("bind_evidence requires CandidateAtom and SourceSnapshot")
     if atom.source_snapshot_id != snapshot.snapshot_id:
         raise QuarantineError("candidate and snapshot do not match")

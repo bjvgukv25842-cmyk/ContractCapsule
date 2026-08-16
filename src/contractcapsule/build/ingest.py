@@ -15,11 +15,12 @@ from urllib.parse import urlsplit
 import yaml
 from yaml.tokens import AliasToken, AnchorToken, TagToken
 
+from contractcapsule.audit import quarantine as quarantine_module
 from contractcapsule.audit.quarantine import (
     QuarantineError,
     QuarantineStore,
+    TrustRoot,
     default_store,
-    scan_secrets,
 )
 from contractcapsule.models import Principal
 from contractcapsule.models.base import (
@@ -292,6 +293,7 @@ class SourceSnapshot:
     parser_kind: str = "text"
     generated: bool = False
     _quarantine_token: object | None = field(default=None, repr=False, compare=False)
+    _source_proof: object | None = field(default=None, repr=False, compare=False)
     quarantine: QuarantineStore = field(
         default_factory=default_store, compare=False, repr=False
     )
@@ -301,7 +303,7 @@ class SourceSnapshot:
             raise QuarantineError("snapshot content digest mismatch")
         if not self.snapshot_id or not self.relative_path:
             raise QuarantineError("snapshot identifiers are required")
-        scan_secrets(self.content)
+        quarantine_module.scan_secrets(self.content)
 
     def text(self) -> str:
         try:
@@ -322,7 +324,7 @@ class SourceSnapshot:
         """Check local bytes and immutable Git bytes before using a binding."""
 
         if self.mode == "EXTERNAL_IMMUTABLE":
-            scan_secrets(self.content)
+            quarantine_module.scan_secrets(self.content)
             return
         if self.path is None or self.path.is_symlink() or not self.path.is_file():
             raise QuarantineError("source path is unavailable or not regular")
@@ -330,10 +332,8 @@ class SourceSnapshot:
         if _digest(current) != self.content_digest or current != self.content:
             raise QuarantineError("source drift detected")
         if self.mode == "GIT_IMMUTABLE":
-            if (
-                self.repository_root is None
-            ):  # stored dynamically below for old snapshots
-                return
+            if self.repository_root is None:
+                raise QuarantineError("verified repository root is required")
             committed = _git_show(
                 self.repository_root, self.revision or "", self.relative_path
             )
@@ -341,12 +341,53 @@ class SourceSnapshot:
                 raise QuarantineError("immutable Git source drift detected")
 
 
-def snapshot_source(source: SourceInput, principal: Principal) -> SourceSnapshot:
-    """Capture and register one immutable source snapshot, failing closed on drift/secrets."""
+@dataclass(frozen=True, slots=True)
+class TrustedDeterministicCollector:
+    """Service-composed Git collector that alone may attest deterministic T2 input.
 
-    if not isinstance(principal, Principal):
+    Possession of the Registry/Quarantine trust root is an application-composition
+    authority, not a per-request option. Public ``snapshot_source`` deliberately
+    lacks this authority and therefore classifies caller input as T3.
+    """
+
+    quarantine: QuarantineStore
+    _capability: object = field(repr=False, compare=False)
+
+    def __init__(self, quarantine: QuarantineStore, trust_root: TrustRoot) -> None:
+        if type(quarantine) is not QuarantineStore:
+            raise TypeError("collector quarantine must be a QuarantineStore")
+        if type(trust_root) is not TrustRoot:
+            raise TypeError("collector trust_root must be a TrustRoot")
+        object.__setattr__(self, "quarantine", quarantine)
+        object.__setattr__(
+            self,
+            "_capability",
+            quarantine._bind_deterministic_collector(trust_root),
+        )
+
+    def snapshot(self, source: SourceInput, principal: Principal) -> SourceSnapshot:
+        if type(source) is not SourceInput:
+            raise TypeError("source must be a SourceInput")
+        if source.quarantine is not self.quarantine:
+            raise QuarantineError(
+                "trusted collector source must use its composed quarantine"
+            )
+        return _snapshot_source(source, principal, self._capability)
+
+
+def _snapshot_source(
+    source: SourceInput,
+    principal: Principal,
+    collector_capability: object | None,
+) -> SourceSnapshot:
+    """Capture and register one immutable source snapshot."""
+
+    if type(principal) is not Principal:
         raise TypeError("principal must be a Principal")
-    store = source.quarantine or default_store()
+    # Uncomposed ingestion gets an isolated deny-only quarantine. Reusing the
+    # module default would let unrelated requests collide on snapshot identity
+    # and mutable local source handles.
+    store = source.quarantine or QuarantineStore()
     path: Path | None = None
     relative_path = "external/content"
     repository_root: Path | None = None
@@ -381,7 +422,7 @@ def snapshot_source(source: SourceInput, principal: Principal) -> SourceSnapshot
         content = bytes(source.content)
         if source.uri.startswith("doi:") or source.uri.startswith("urn:"):
             relative_path = source.uri
-    scan_secrets(content)
+    quarantine_module.scan_secrets(content)
     parser_kind = _parser_kind(path or Path(relative_path))
     decoded_content = content.decode("utf-8", errors="strict")
     if parser_kind == "json":
@@ -435,6 +476,23 @@ def snapshot_source(source: SourceInput, principal: Principal) -> SourceSnapshot
         generated=source.generated,
         quarantine=store,
     )
-    object.__setattr__(snapshot, "_quarantine_token", store.snapshot_token())
-    store.register_snapshot(snapshot)
-    return snapshot
+    object.__setattr__(snapshot, "_quarantine_token", store._snapshot_capability())
+    # Only the service-composed collector can request a T2 proof after the Git,
+    # commit, parser, digest, and source-path checks above. Public ingestion has no
+    # collector capability, so ``generated=False`` remains a non-authoritative hint.
+    if collector_capability is not None:
+        proof = store._issue_deterministic_source_proof(
+            snapshot, collector_capability
+        )
+        if proof is not None:
+            object.__setattr__(snapshot, "_source_proof", proof)
+    registered = store.register_snapshot(snapshot)
+    if type(registered) is not SourceSnapshot:
+        raise QuarantineError("snapshot registration returned an invalid object")
+    return registered
+
+
+def snapshot_source(source: SourceInput, principal: Principal) -> SourceSnapshot:
+    """Capture caller input as T3, irrespective of its generated declaration."""
+
+    return _snapshot_source(source, principal, None)

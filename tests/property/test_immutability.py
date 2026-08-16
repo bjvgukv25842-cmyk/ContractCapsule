@@ -13,7 +13,11 @@ from contractcapsule.models import Principal
 from contractcapsule.models.canonical import canonical_digest
 from contractcapsule.storage.cas import FilesystemCAS
 from contractcapsule.storage.registry import PolicyDecision, Registry, VersionConflict
-from tests.m2_helpers import capsule_with_digest, sample_capsule_data
+from tests.m2_helpers import (
+    TrustedM3TestHarness,
+    capsule_with_digest,
+    sample_capsule_data,
+)
 
 
 @given(st.text(min_size=1).filter(lambda value: "\ud800" not in value))
@@ -88,32 +92,41 @@ def test_model_remains_immutable_for_generated_replacements(authority: str) -> N
 @given(st.integers(min_value=1, max_value=5))
 @settings(max_examples=10)
 def test_exact_republication_never_mutates_the_record(repeats: int) -> None:
-    capsule = capsule_with_digest()
     with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
+        root = Path(directory).resolve()
         cas = FilesystemCAS(root / "cas")
-        cas.put_blob(b"authoritative evidence\n", "text/plain")
-        registry = Registry(root / "registry.sqlite3", cas, PropertyResolver())
-        first = registry.publish(capsule, Principal("publisher"))
+        harness = TrustedM3TestHarness.create(root, cas)
+        registry = Registry(
+            root / "registry.sqlite3",
+            cas,
+            PropertyResolver(),
+            trust_root=harness.authority.trust_root(),
+        )
+        draft = harness.build_draft()
+        first = harness.publish(draft, registry)
         counts = registry._table_counts()
         for _ in range(repeats):
-            assert registry.publish(capsule, Principal("publisher")) == first
+            assert harness.publish(draft, registry) == first
         assert registry._table_counts() == counts
 
 
 @given(st.text(min_size=1, alphabet=st.characters(min_codepoint=97, max_codepoint=122)))
 @settings(max_examples=15)
 def test_same_version_conflict_always_fails_closed(statement: str) -> None:
-    original = capsule_with_digest()
-    if statement == original.semantic_payload.atoms[0].statement:
-        return
     with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
+        root = Path(directory).resolve()
         cas = FilesystemCAS(root / "cas")
-        cas.put_blob(b"authoritative evidence\n", "text/plain")
-        registry = Registry(root / "registry.sqlite3", cas, PropertyResolver())
-        registry.publish(original, Principal("publisher"))
-        changed_data = sample_capsule_data()
-        changed_data["semantic_payload"]["atoms"][0]["statement"] = statement
+        harness = TrustedM3TestHarness.create(root, cas)
+        registry = Registry(
+            root / "registry.sqlite3",
+            cas,
+            PropertyResolver(),
+            trust_root=harness.authority.trust_root(),
+        )
+        original_draft = harness.build_draft()
+        if statement == original_draft.capsule.semantic_payload.atoms[0].statement:
+            return
+        harness.publish(original_draft, registry)
+        changed_draft = harness.build_draft(source_bytes=(statement + "\n").encode())
         with pytest.raises(VersionConflict):
-            registry.publish(capsule_with_digest(changed_data), Principal("publisher"))
+            harness.publish(changed_draft, registry)

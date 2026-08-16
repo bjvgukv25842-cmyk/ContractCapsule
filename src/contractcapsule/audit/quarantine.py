@@ -16,9 +16,15 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from threading import RLock
+from types import MappingProxyType
 from typing import Any, Protocol
 
-from contractcapsule.models.base import ModelInvariantError, reject_surrogates
+from contractcapsule.models.base import (
+    ModelInvariantError,
+    freeze_json,
+    reject_surrogates,
+    thaw_json,
+)
 from contractcapsule.models.canonical import canonical_json_bytes
 
 
@@ -49,6 +55,10 @@ _ASSIGNMENT_SECRET_RE = re.compile(
     r"(?i)\b(?:api[_-]?key|access[_-]?token|secret(?:[_-]?key)?|password|passwd)"
     r"\b\s*[:=]\s*(['\"]?)([A-Za-z0-9_./+=:-]{12,})\1"
 )
+
+TRUST_POLICY_VERSION = "CCS-2.1-m3-trust-v1"
+SECRET_SCANNER_VERSION = "m3-secret-scanner-v1"
+DETERMINISTIC_SOURCE_PROFILE = "CCS-2.1-deterministic-source-v1"
 
 
 def _ensure_digest(value: str, label: str = "digest") -> str:
@@ -102,6 +112,28 @@ def scan_secrets(data: bytes | str) -> None:
         or _ASSIGNMENT_SECRET_RE.search(text)
     ):
         raise SecretDetectedError("secret-like content is forbidden in source evidence")
+
+
+@dataclass(frozen=True, slots=True)
+class DeterministicSourceProof:
+    """Opaque service proof for a deterministically parsed immutable Git snapshot."""
+
+    snapshot_id: str
+    content_digest: str
+    mode: str
+    parser_kind: str
+    repository: str
+    revision: str
+    path: str
+    collector_profile: str = DETERMINISTIC_SOURCE_PROFILE
+    _token: object | None = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        _ensure_digest(self.content_digest, "deterministic source content_digest")
+        if self.mode != "GIT_IMMUTABLE":
+            raise QuarantineError("deterministic source proof requires immutable Git")
+        if self.parser_kind not in {"markdown", "code", "json", "yaml"}:
+            raise QuarantineError("source parser is not in the deterministic profile")
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +194,11 @@ class EvidenceBinding:
 
 @dataclass(frozen=True, slots=True)
 class CandidateAtom:
-    """Untrusted source-derived atom.  Candidates are always T3/candidate."""
+    """Source-derived candidate awaiting evidence and external approval.
+
+    Public or generated ingestion starts at T3. A service-composed deterministic
+    Git collector may issue a T2 candidate, but neither class is validated yet.
+    """
 
     candidate_id: str
     atom_id: str
@@ -263,6 +299,137 @@ class HumanApproval:
         )
 
 
+class TrustRoot:
+    """Sealed, process-local trust root for M3 approval and publication proofs.
+
+    This is a deliberately narrow research adapter.  It gives the service one fixed
+    authority at construction time; callers cannot install an arbitrary allow-all
+    verifier or choose a verifier per publication.
+    """
+
+    def __init__(
+        self,
+        approver_secrets: Mapping[str, bytes],
+        *,
+        issuer: str = "trusted-human-review",
+        policy_version: str = TRUST_POLICY_VERSION,
+    ) -> None:
+        normalized = {
+            str(key): bytes(value) for key, value in approver_secrets.items()
+        }
+        if not normalized or any(not value for value in normalized.values()):
+            raise QuarantineError("trust root requires non-empty approver secrets")
+        if not issuer or not policy_version:
+            raise QuarantineError("trust root identifiers must be non-empty")
+        reject_surrogates(issuer)
+        reject_surrogates(policy_version)
+        self._secrets = MappingProxyType(normalized)
+        self.issuer = issuer
+        self.policy_version = policy_version
+        self._signer_id = min(normalized)
+        self._permit_token = object()
+        self._sealed = True
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError("TrustRoot is immutable")
+        object.__setattr__(self, name, value)
+
+    @property
+    def root_id(self) -> str:
+        identity = {
+            "issuer": self.issuer,
+            "policy_version": self.policy_version,
+            "signer_id": self._signer_id,
+            "approvers": [
+                {
+                    "approver_id": approver_id,
+                    "key_fingerprint": hashlib.sha256(secret).hexdigest(),
+                }
+                for approver_id, secret in sorted(self._secrets.items())
+            ],
+        }
+        return "trust-root-" + hashlib.sha256(canonical_json_bytes(identity)).hexdigest()[:32]
+
+    def verifier(self) -> ApprovalVerifier:
+        return _HmacApprovalVerifier(self._secrets, self.issuer, self)
+
+    def _sign_payload(self, payload: Mapping[str, Any]) -> str:
+        frozen = freeze_json(payload)
+        if not isinstance(frozen, Mapping):
+            raise QuarantineError("publication proof payload must be an object")
+        message = canonical_json_bytes(thaw_json(frozen))
+        signature = hmac.new(
+            self._secrets[self._signer_id], message, hashlib.sha256
+        ).hexdigest()
+        return f"hmac-sha256:{self._signer_id}:{signature}"
+
+    def _permit_capability(self) -> object:
+        return self._permit_token
+
+    def _sign_permit(self, payload: Mapping[str, Any], capability: object) -> str:
+        if capability is not self._permit_token:
+            raise QuarantineError("permit signing capability is invalid")
+        return self._sign_payload(payload)
+
+    def verify_payload(self, payload: Mapping[str, Any], signature: str) -> bool:
+        if not isinstance(signature, str) or not signature.startswith("hmac-sha256:"):
+            return False
+        parts = signature.split(":", 2)
+        if len(parts) != 3 or parts[1] != self._signer_id:
+            return False
+        try:
+            expected = self._sign_payload(payload)
+        except (QuarantineError, ValueError, TypeError):
+            return False
+        return hmac.compare_digest(signature, expected)
+
+
+class _PublicationIssuer:
+    """Process-local capability attached only to store-issued permits."""
+
+    __slots__ = ("_sealed", "_token", "store_id")
+
+    def __init__(self, store_id: str) -> None:
+        object.__setattr__(self, "store_id", store_id)
+        object.__setattr__(self, "_token", object())
+        object.__setattr__(self, "_sealed", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError("publication issuer is immutable")
+        object.__setattr__(self, name, value)
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationPermit:
+    """Signed final-publication proof issued only by a quarantine store."""
+
+    payload: Mapping[str, Any]
+    signature: str
+    source_bytes: tuple[bytes, ...] = field(default=(), repr=False, compare=False)
+    loader_attestation: Any | None = field(default=None, repr=False, compare=False)
+    issuer_capability: object | None = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        try:
+            frozen = freeze_json(self.payload)
+        except (ModelInvariantError, TypeError, ValueError) as error:
+            raise QuarantineError("publication proof payload is not JSON-safe") from error
+        if not isinstance(frozen, Mapping):
+            raise QuarantineError("publication proof payload must be an object")
+        if not isinstance(self.signature, str) or not self.signature:
+            raise QuarantineError("publication proof signature is required")
+        if any(not isinstance(item, bytes) for item in self.source_bytes):
+            raise QuarantineError("publication proof source subjects must be bytes")
+        object.__setattr__(self, "payload", frozen)
+
+    def verify(self, trust_root: TrustRoot) -> bool:
+        if type(trust_root) is not TrustRoot:
+            return False
+        return trust_root.verify_payload(thaw_json(self.payload), self.signature)
+
+
 class ApprovalAuthority:
     """Injectable local verifier for auditable human approval records.
 
@@ -277,10 +444,9 @@ class ApprovalAuthority:
         *,
         issuer: str = "trusted-human-review",
     ) -> None:
-        self._secrets = {
-            str(key): bytes(value) for key, value in approver_secrets.items()
-        }
-        self.issuer = issuer
+        self._trust_root = TrustRoot(approver_secrets, issuer=issuer)
+        self._secrets = MappingProxyType(dict(self._trust_root._secrets))
+        self.issuer = self._trust_root.issuer
 
     def issue(
         self,
@@ -320,7 +486,12 @@ class ApprovalAuthority:
     def verifier(self) -> ApprovalVerifier:
         """Return a verify-only trust adapter suitable for a quarantine store."""
 
-        return _HmacApprovalVerifier(self._secrets, self.issuer)
+        return self._trust_root.verifier()
+
+    def trust_root(self) -> TrustRoot:
+        """Return the immutable service trust root for explicit composition."""
+
+        return self._trust_root
 
 
 class ApprovalVerifier(Protocol):
@@ -328,9 +499,19 @@ class ApprovalVerifier(Protocol):
 
 
 class _HmacApprovalVerifier:
-    def __init__(self, approver_secrets: Mapping[str, bytes], issuer: str) -> None:
+    def __init__(
+        self,
+        approver_secrets: Mapping[str, bytes],
+        issuer: str,
+        trust_root: TrustRoot | None = None,
+    ) -> None:
         self.__secrets = dict(approver_secrets)
         self.__issuer = issuer
+        self.__trust_root = trust_root
+
+    @property
+    def trust_root(self) -> TrustRoot | None:
+        return self.__trust_root
 
     def verify(self, approval: HumanApproval) -> bool:
         secret = self.__secrets.get(approval.approver_id)
@@ -372,6 +553,7 @@ class ValidatedAtom:
     evidence_bindings: tuple[EvidenceBinding, ...]
     approval: HumanApproval
     source_trust_level: str = TrustLevel.T2
+    generated: bool = False
     trust_level: str = TrustLevel.T1
     status: str = "validated"
 
@@ -433,32 +615,127 @@ def binding_digest_for(binding: EvidenceBinding) -> str:
 class QuarantineStore:
     """Append-only in-memory quarantine state with default-deny promotion."""
 
-    def __init__(self, approval_verifier: ApprovalVerifier | None = None) -> None:
-        self._approval_verifier = approval_verifier or _DenyAllApprovalVerifier()
+    def __init__(
+        self,
+        approval_verifier: ApprovalVerifier | None = None,
+        *,
+        trust_root: TrustRoot | None = None,
+    ) -> None:
+        if approval_verifier is not None and type(approval_verifier) is not _HmacApprovalVerifier:
+            raise TypeError("quarantine requires the project trust-root verifier")
+        if trust_root is not None and type(trust_root) is not TrustRoot:
+            raise TypeError("trust_root must be a TrustRoot")
+        verifier_root = (
+            approval_verifier.trust_root
+            if type(approval_verifier) is _HmacApprovalVerifier
+            else None
+        )
+        if trust_root is not None and verifier_root is not None and trust_root is not verifier_root:
+            raise QuarantineError("approval verifier and trust root disagree")
+        self._trust_root = trust_root or verifier_root
+        self._approval_verifier = (
+            self._trust_root.verifier()
+            if self._trust_root is not None
+            else _DenyAllApprovalVerifier()
+        )
         self._snapshots: dict[str, Any] = {}
         self._candidates: dict[str, CandidateAtom] = {}
         self._bindings: dict[str, tuple[EvidenceBinding, ...]] = {}
         self._promoted: dict[str, ValidatedAtom] = {}
         self._snapshot_token = object()
         self._candidate_token = object()
+        self._deterministic_source_token = object()
+        self._loader_token = object()
+        self._loader_store_id = "quarantine-" + secrets.token_hex(16)
+        self._publication_issuer = _PublicationIssuer(self._loader_store_id)
+        self._permit_token = object()
         self._lock = RLock()
+        self._composition_sealed = True
 
-    def register_snapshot(self, snapshot: Any) -> None:
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_composition_sealed", False) and name in {
+            "_trust_root",
+            "_approval_verifier",
+            "_snapshot_token",
+            "_candidate_token",
+            "_deterministic_source_token",
+            "_loader_token",
+            "_loader_store_id",
+            "_publication_issuer",
+            "_permit_token",
+        }:
+            raise AttributeError("QuarantineStore trust composition is immutable")
+        object.__setattr__(self, name, value)
+
+    def _has_trust_root(self) -> bool:
+        return self._trust_root is not None
+
+    def _bind_deterministic_collector(self, trust_root: TrustRoot) -> object:
+        """Bind the deterministic collector to this service composition root."""
+
+        if type(trust_root) is not TrustRoot or trust_root is not self._trust_root:
+            raise QuarantineError(
+                "deterministic collector requires the configured trust root"
+            )
+        return self._deterministic_source_token
+
+    def register_snapshot(self, snapshot: Any) -> Any:
         with self._lock:
+            from contractcapsule.build.ingest import SourceSnapshot
+
+            if type(snapshot) is not SourceSnapshot:
+                raise QuarantineError("snapshot must be the ingestion boundary type")
             if getattr(snapshot, "_quarantine_token", None) is not self._snapshot_token:
                 raise QuarantineError(
                     "snapshot was not created by the ingestion boundary"
                 )
+            proof = getattr(snapshot, "_source_proof", None)
+            if proof is not None and not self.has_deterministic_source_proof(snapshot):
+                raise QuarantineError(
+                    "deterministic source snapshot lacks a trusted parser proof"
+                )
             existing = self._snapshots.get(snapshot.snapshot_id)
-            if (
-                existing is not None
-                and existing.content_digest != snapshot.content_digest
-            ):
-                raise QuarantineError("snapshot identity collision")
+            if existing is not None:
+                trust_fields = (
+                    "content_digest",
+                    "mode",
+                    "media_type",
+                    "principal_id",
+                    "relative_path",
+                    "repository",
+                    "revision",
+                    "uri",
+                    "source",
+                    "verification_method",
+                    "access_policy",
+                    "parser_kind",
+                    "generated",
+                )
+                if any(
+                    getattr(existing, field_name, None)
+                    != getattr(snapshot, field_name, None)
+                    for field_name in trust_fields
+                ):
+                    raise QuarantineError("snapshot identity collision")
+                has_bound_candidates = any(
+                    candidate.source_snapshot_id == snapshot.snapshot_id
+                    for candidate in self._candidates.values()
+                )
+                if has_bound_candidates and (
+                    existing.path != snapshot.path
+                    or existing.repository_root != snapshot.repository_root
+                    or existing.captured_at != snapshot.captured_at
+                ):
+                    raise QuarantineError(
+                        "bound snapshot cannot be replaced by a new capture"
+                    )
             self._snapshots[snapshot.snapshot_id] = snapshot
+            return snapshot
 
     def register_candidate(self, candidate: CandidateAtom) -> None:
         with self._lock:
+            if type(candidate) is not CandidateAtom:
+                raise QuarantineError("candidate must be the deterministic extractor type")
             if candidate._quarantine_token is not self._candidate_token:
                 raise QuarantineError(
                     "candidate was not created by the deterministic extractor"
@@ -487,7 +764,12 @@ class QuarantineStore:
                 raise QuarantineError("candidate atom identity is not deterministic")
             if candidate.scope != (f"path:{snapshot.relative_path}",):
                 raise QuarantineError("candidate scope is not source-bound")
-            expected_trust = TrustLevel.T3 if snapshot.generated else TrustLevel.T2
+            expected_trust = (
+                TrustLevel.T2
+                if self.has_deterministic_source_proof(snapshot)
+                and not snapshot.generated
+                else TrustLevel.T3
+            )
             if (
                 candidate.generated != snapshot.generated
                 or candidate.trust_level != expected_trust
@@ -506,14 +788,79 @@ class QuarantineStore:
                 and existing.content_digest == snapshot.content_digest
             )
 
-    def snapshot_token(self) -> object:
+    def _snapshot_capability(self) -> object:
         return self._snapshot_token
 
-    def candidate_token(self) -> object:
+    def _candidate_capability(self) -> object:
         return self._candidate_token
+
+    def _loader_capability(self) -> object:
+        return self._loader_token
+
+    @property
+    def _loader_identity(self) -> str:
+        return self._loader_store_id
+
+    def _issue_deterministic_source_proof(
+        self, snapshot: Any, collector_capability: object | None = None
+    ) -> DeterministicSourceProof | None:
+        from contractcapsule.build.ingest import SourceSnapshot
+
+        if type(snapshot) is not SourceSnapshot:
+            raise QuarantineError("deterministic proof requires an ingestion snapshot")
+        if collector_capability is not self._deterministic_source_token:
+            raise QuarantineError("deterministic collector capability is required")
+        # A deterministic T2 classification is only available through the
+        # explicitly composed collector boundary. Public ingestion never receives
+        # this capability merely because a caller says ``generated=False``.
+        if self._trust_root is None:
+            return None
+        if (
+            snapshot.mode != "GIT_IMMUTABLE"
+            or snapshot.generated
+            or snapshot.parser_kind not in {"markdown", "code", "json", "yaml"}
+            or not snapshot.repository
+            or not snapshot.revision
+            or not snapshot.relative_path
+            or snapshot.repository_root is None
+        ):
+            if snapshot.mode == "GIT_IMMUTABLE" and not snapshot.generated:
+                raise QuarantineError("verified repository root is required")
+            return None
+        if getattr(snapshot, "_quarantine_token", None) is not self._snapshot_token:
+            raise QuarantineError("snapshot was not issued by this quarantine")
+        snapshot.assert_current()
+        return DeterministicSourceProof(
+            snapshot_id=snapshot.snapshot_id,
+            content_digest=snapshot.content_digest,
+            mode=snapshot.mode,
+            parser_kind=snapshot.parser_kind,
+            repository=snapshot.repository,
+            revision=snapshot.revision,
+            path=snapshot.relative_path,
+            _token=self._deterministic_source_token,
+        )
+
+    def has_deterministic_source_proof(self, snapshot: Any) -> bool:
+        proof = getattr(snapshot, "_source_proof", None)
+        return (
+            isinstance(proof, DeterministicSourceProof)
+            and proof._token is self._deterministic_source_token
+            and proof.collector_profile == DETERMINISTIC_SOURCE_PROFILE
+            and proof.snapshot_id == snapshot.snapshot_id
+            and proof.content_digest == snapshot.content_digest
+            and proof.mode == snapshot.mode == "GIT_IMMUTABLE"
+            and proof.parser_kind == snapshot.parser_kind
+            and proof.repository == snapshot.repository
+            and proof.revision == snapshot.revision
+            and proof.path == snapshot.relative_path
+            and not snapshot.generated
+        )
 
     def register_binding(self, binding: EvidenceBinding) -> None:
         with self._lock:
+            if type(binding) is not EvidenceBinding:
+                raise QuarantineError("evidence binding must be the quarantine type")
             candidate = self._candidates.get(binding.candidate_id)
             if candidate is None:
                 raise QuarantineError("evidence binding references unknown candidate")
@@ -681,7 +1028,7 @@ class QuarantineStore:
 
     def promote(self, candidate_id: str, approval: HumanApproval) -> ValidatedAtom:
         with self._lock:
-            if not isinstance(approval, HumanApproval):
+            if type(approval) is not HumanApproval:
                 raise QuarantineError("a human approval record is required")
             candidate, bindings, snapshot = self._promotion_inputs(candidate_id)
             self._verify_snapshot(snapshot)
@@ -703,6 +1050,7 @@ class QuarantineStore:
                 evidence_bindings=bindings,
                 approval=approval,
                 source_trust_level=candidate.trust_level,
+                generated=candidate.generated,
             )
             self._promoted[candidate_id] = validated
             return validated
@@ -711,6 +1059,8 @@ class QuarantineStore:
         """Recheck that an exact validated value was emitted by this store."""
 
         with self._lock:
+            if type(atom) is not ValidatedAtom:
+                raise QuarantineError("validated atom must be the quarantine type")
             promoted = self._promoted.get(atom.candidate_id)
             if promoted is None or promoted != atom:
                 raise QuarantineError(
@@ -727,6 +1077,13 @@ class QuarantineStore:
             candidate = self._candidates.get(atom.candidate_id)
             if candidate is None:
                 raise QuarantineError("validated atom candidate is unavailable")
+            if (
+                candidate.trust_level == TrustLevel.T2
+                and not self.has_deterministic_source_proof(snapshot)
+            ):
+                raise QuarantineError(
+                    "validated atom deterministic source proof is unavailable"
+                )
             for binding in atom.evidence_bindings:
                 self._verify_binding(candidate, snapshot, binding)
             if atom.approval.expires_at is not None and _parse_timestamp(
@@ -735,6 +1092,230 @@ class QuarantineStore:
                 raise QuarantineError("validated atom approval is expired")
             if not self._approval_verifier.verify(atom.approval):
                 raise QuarantineError("validated atom approval is no longer trusted")
+
+    @staticmethod
+    def _approval_wire(approval: HumanApproval) -> dict[str, Any]:
+        return {
+            "approval_id": approval.approval_id,
+            "candidate_id": approval.candidate_id,
+            "approver_id": approval.approver_id,
+            "approved_at": approval.approved_at,
+            "decision": approval.decision,
+            "candidate_digest": approval.candidate_digest,
+            "evidence_digests": list(approval.evidence_digests),
+            "expires_at": approval.expires_at,
+            "signature": approval.signature,
+            "issuer": approval.issuer,
+        }
+
+    @staticmethod
+    def _binding_wire(binding: EvidenceBinding) -> dict[str, Any]:
+        return {
+            "binding_id": binding.binding_id,
+            "candidate_id": binding.candidate_id,
+            "snapshot_id": binding.snapshot_id,
+            "mode": binding.mode,
+            "content_digest": binding.content_digest,
+            "span_digest": binding.span_digest,
+            "media_type": binding.media_type,
+            "captured_at": binding.captured_at,
+            "access_policy": binding.access_policy,
+            "repository": binding.repository,
+            "revision": binding.revision,
+            "path": binding.path,
+            "symbol_or_heading": binding.symbol_or_heading,
+            "start_line": binding.start_line,
+            "end_line": binding.end_line,
+            "uri": binding.uri,
+            "source": binding.source,
+            "verification_method": binding.verification_method,
+        }
+
+    @staticmethod
+    def _candidate_wire(candidate: CandidateAtom) -> dict[str, Any]:
+        return {
+            "candidate_id": candidate.candidate_id,
+            "atom_id": candidate.atom_id,
+            "kind": candidate.kind,
+            "statement": candidate.statement,
+            "modality": candidate.modality,
+            "scope": list(candidate.scope),
+            "source_snapshot_id": candidate.source_snapshot_id,
+            "start_line": candidate.start_line,
+            "end_line": candidate.end_line,
+            "symbol_or_heading": candidate.symbol_or_heading,
+            "compression_class": candidate.compression_class,
+            "generated": candidate.generated,
+            "trust_level": candidate.trust_level,
+            "status": candidate.status,
+        }
+
+    @staticmethod
+    def _source_proof_wire(snapshot: Any) -> dict[str, Any] | None:
+        proof = getattr(snapshot, "_source_proof", None)
+        if not isinstance(proof, DeterministicSourceProof):
+            return None
+        return {
+            "snapshot_id": proof.snapshot_id,
+            "content_digest": proof.content_digest,
+            "mode": proof.mode,
+            "parser_kind": proof.parser_kind,
+            "repository": proof.repository,
+            "revision": proof.revision,
+            "path": proof.path,
+            "collector_profile": proof.collector_profile,
+        }
+
+    def _permit_atom_entry(
+        self, atom: ValidatedAtom
+    ) -> tuple[dict[str, Any], tuple[EvidenceBinding, ...]]:
+        if type(atom) is not ValidatedAtom:
+            raise QuarantineError("publication permit accepts validated atoms only")
+        self.verify_validated(atom)
+        candidate = self.candidate(atom.candidate_id)
+        snapshot = self._snapshots.get(atom.source_snapshot_id)
+        if snapshot is None:
+            raise QuarantineError("validated atom snapshot is unavailable")
+        bindings = tuple(atom.evidence_bindings)
+        entry = self._candidate_wire(candidate)
+        entry.update(
+            {
+                "candidate_digest": candidate_digest_for(candidate),
+                "snapshot_id": atom.source_snapshot_id,
+                "snapshot_principal_id": snapshot.principal_id,
+                "snapshot_captured_at": snapshot.captured_at,
+                "source_trust_level": atom.source_trust_level,
+                "validated_trust_level": atom.trust_level,
+                "validated_status": atom.status,
+                "source_proof": self._source_proof_wire(snapshot),
+                "approval": self._approval_wire(atom.approval),
+                "bindings": [self._binding_wire(item) for item in bindings],
+            }
+        )
+        return entry, bindings
+
+    @staticmethod
+    def _permit_subjects(
+        bindings: Iterable[EvidenceBinding],
+        seen: set[tuple[str, str]],
+        subjects: list[dict[str, Any]],
+        source_bytes: list[bytes],
+    ) -> None:
+        for binding in bindings:
+            key = (binding.binding_id, binding.content_digest)
+            if key in seen:
+                continue
+            seen.add(key)
+            subjects.append(
+                {
+                    "binding_id": binding.binding_id,
+                    "mode": binding.mode,
+                    "content_digest": binding.content_digest,
+                    "media_type": binding.media_type,
+                    "snapshot_id": binding.snapshot_id,
+                }
+            )
+            source_bytes.append(bytes(binding.source_bytes))
+
+    @staticmethod
+    def _permit_target(capsule: Any) -> dict[str, Any]:
+        scope = capsule.control_manifest.scope
+        return {
+            "authority": capsule.control_manifest.authority,
+            "scope": {
+                "repositories": list(scope.repositories),
+                "paths": list(scope.paths),
+                "environments": list(scope.environments),
+            },
+        }
+
+    @staticmethod
+    def _validate_loader_attestation(
+        attestation: Any, digest: str, expected_type: type[Any]
+    ) -> None:
+        if type(attestation) is not expected_type:
+            raise QuarantineError("loader attestation is required")
+        if not attestation.verify(None):
+            raise QuarantineError("loader attestation signature is invalid")
+        if attestation.capsule_digest != digest:
+            raise QuarantineError("loader attestation capsule digest mismatch")
+
+    def _validate_loader_issuer(self, attestation: Any) -> None:
+        if (
+            attestation._capability is not self._loader_token
+            or attestation.store_id != self._loader_store_id
+        ):
+            raise QuarantineError("loader attestation was not issued by this quarantine")
+
+    def issue_publication_permit(
+        self,
+        capsule: Any,
+        validated_atoms: Iterable[ValidatedAtom],
+        principal: Any,
+        *,
+        loader_attestation: Any | None = None,
+    ) -> PublicationPermit:
+        """Issue a signed, one-shot-at-a-time publication attestation.
+
+        The permit is intentionally detached from the Capsule.  It binds the exact
+        canonical digest, publisher, candidate records, evidence records and source
+        subject digests, then is rechecked by Registry immediately before persistence.
+        """
+
+        if self._trust_root is None:
+            raise QuarantineError("a configured trust root is required for publication")
+        from contractcapsule.models import Capsule, Principal
+        from contractcapsule.models.canonical import canonical_digest
+
+        if type(capsule) is not Capsule or type(principal) is not Principal:
+            raise TypeError("capsule and principal types are required")
+        if capsule.control_manifest.lifecycle != "PUBLISHED":
+            raise QuarantineError("publication permit requires PUBLISHED lifecycle")
+        digest = canonical_digest(capsule)
+        if digest != capsule.control_manifest.content_digest:
+            raise QuarantineError("publication permit capsule digest is invalid")
+        try:
+            from contractcapsule.build.publish import LoaderAttestation
+        except (ImportError, AttributeError) as error:
+            raise QuarantineError("loader attestation type is unavailable") from error
+        self._validate_loader_attestation(loader_attestation, digest, LoaderAttestation)
+        self._validate_loader_issuer(loader_attestation)
+        atoms = tuple(validated_atoms)
+        if not atoms:
+            raise QuarantineError("publication permit requires validated atoms")
+        if loader_attestation is None:  # Defensive guard; helper validation is fail-closed.
+            raise QuarantineError("loader attestation is required")
+        entries: list[dict[str, Any]] = []
+        source_bytes: list[bytes] = []
+        subjects: list[dict[str, Any]] = []
+        seen_subjects: set[tuple[str, str]] = set()
+        for atom in atoms:
+            entry, bindings = self._permit_atom_entry(atom)
+            entries.append(entry)
+            self._permit_subjects(bindings, seen_subjects, subjects, source_bytes)
+        target = self._permit_target(capsule)
+        payload = {
+            "policy_version": self._trust_root.policy_version,
+            "trust_root_id": self._trust_root.root_id,
+            "capsule_id": capsule.control_manifest.capsule_id,
+            "version": capsule.control_manifest.version,
+            "capsule_digest": digest,
+            "principal_id": principal.principal_id,
+            **target,
+            "scanner_version": SECRET_SCANNER_VERSION,
+            "loader_attestation": loader_attestation.wire(),
+            "atoms": entries,
+            "source_subjects": subjects,
+        }
+        return PublicationPermit(
+            payload=payload,
+            signature=self._trust_root._sign_permit(
+                payload, self._trust_root._permit_capability()
+            ),
+            source_bytes=tuple(source_bytes),
+            loader_attestation=loader_attestation,
+            issuer_capability=self._publication_issuer,
+        )
 
 
 _DEFAULT_STORE = QuarantineStore()
@@ -745,12 +1326,19 @@ def default_store() -> QuarantineStore:
 
 
 def configure_default_store(store: QuarantineStore) -> None:
-    """Install an explicitly configured process-local store for the functional API."""
+    """Reject public replacement of the process default trust boundary.
 
-    global _DEFAULT_STORE
+    Production composition passes an explicit ``QuarantineStore`` to ingestion and
+    build requests.  The process-wide fallback remains permanently deny-all so an
+    arbitrary first caller cannot install its own approval root.
+    """
+
     if not isinstance(store, QuarantineStore):
         raise TypeError("default quarantine must be a QuarantineStore")
-    _DEFAULT_STORE = store
+    del store
+    raise QuarantineError(
+        "default quarantine is immutable deny-all; use explicit trusted startup composition"
+    )
 
 
 def promote(candidate_id: str, approval: HumanApproval) -> ValidatedAtom:

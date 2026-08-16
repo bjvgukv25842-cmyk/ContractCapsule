@@ -25,7 +25,12 @@ from contractcapsule.storage.registry import (
     RegistryNotFound,
     VersionConflict,
 )
-from tests.m2_helpers import CAS_BYTES, capsule_with_digest, sample_capsule_data
+from tests.m2_helpers import (
+    CAS_BYTES,
+    TrustedM3TestHarness,
+    capsule_with_digest,
+    sample_capsule_data,
+)
 
 
 class StubResolver:
@@ -71,14 +76,22 @@ class MalformedResolver:
         )
 
 
-def setup_registry(tmp_path: Path) -> tuple[Registry, FilesystemCAS, StubResolver]:
+def setup_registry(
+    tmp_path: Path,
+) -> tuple[Registry, FilesystemCAS, StubResolver, TrustedM3TestHarness]:
     resolver = StubResolver()
     resolver.grant("publisher", "publish")
     resolver.grant("reader", "read")
     cas = FilesystemCAS(tmp_path / "cas")
     cas.put_blob(CAS_BYTES, "text/plain")
-    registry = Registry(tmp_path / "registry.sqlite3", cas, resolver)
-    return registry, cas, resolver
+    harness = TrustedM3TestHarness.create(tmp_path, cas)
+    registry = Registry(
+        tmp_path / "registry.sqlite3",
+        cas,
+        resolver,
+        trust_root=harness.authority.trust_root(),
+    )
+    return registry, cas, resolver, harness
 
 
 def test_default_resolver_denies_all() -> None:
@@ -89,16 +102,22 @@ def test_default_resolver_denies_all() -> None:
 
 
 def test_first_publish_and_restart_get_preserve_immutable_fields(tmp_path: Path) -> None:
-    registry, cas, resolver = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    published = registry.publish(capsule, Principal("publisher"))
+    registry, cas, resolver, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    capsule = draft.capsule
+    published = harness.publish(draft, registry)
     assert canonical_digest(published.capsule) == canonical_digest(capsule)
     assert published.capsule.detached_signature == capsule.detached_signature
     assert not published.capsule.derived_artifacts
     assert not published.capsule.runtime_sidecar
     assert published.registry_status == "PUBLISHED"
 
-    restarted = Registry(tmp_path / "registry.sqlite3", cas, resolver)
+    restarted = Registry(
+        tmp_path / "registry.sqlite3",
+        cas,
+        resolver,
+        trust_root=harness.authority.trust_root(),
+    )
     loaded = restarted.get(
         capsule.control_manifest.capsule_id,
         capsule.control_manifest.version,
@@ -109,11 +128,11 @@ def test_first_publish_and_restart_get_preserve_immutable_fields(tmp_path: Path)
 
 
 def test_exact_republish_is_idempotent_without_timestamp_or_row_changes(tmp_path: Path) -> None:
-    registry, _, _ = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    first = registry.publish(capsule, Principal("publisher"))
+    registry, _, _, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    first = harness.publish(draft, registry)
     counts_before = registry._table_counts()
-    second = registry.publish(capsule, Principal("publisher"))
+    second = harness.publish(draft, registry)
     assert second == first
     assert second.published_at == first.published_at
     assert registry._table_counts() == counts_before
@@ -122,14 +141,13 @@ def test_exact_republish_is_idempotent_without_timestamp_or_row_changes(tmp_path
 def test_same_id_version_different_digest_is_rejected_and_original_survives(
     tmp_path: Path,
 ) -> None:
-    registry, _, _ = setup_registry(tmp_path)
-    original = capsule_with_digest()
-    registry.publish(original, Principal("publisher"))
-    changed_data = sample_capsule_data()
-    changed_data["semantic_payload"]["atoms"][0]["statement"] = "different"
-    changed = capsule_with_digest(changed_data)
+    registry, _, _, harness = setup_registry(tmp_path)
+    original_draft = harness.build_draft()
+    original = original_draft.capsule
+    harness.publish(original_draft, registry)
+    changed_draft = harness.build_draft(source_bytes=b"different\n")
     with pytest.raises(VersionConflict):
-        registry.publish(changed, Principal("publisher"))
+        harness.publish(changed_draft, registry)
     assert registry.get(
         original.control_manifest.capsule_id,
         original.control_manifest.version,
@@ -138,24 +156,31 @@ def test_same_id_version_different_digest_is_rejected_and_original_survives(
 
 
 def test_same_digest_different_detached_envelope_is_not_idempotent(tmp_path: Path) -> None:
-    registry, _, _ = setup_registry(tmp_path)
-    original = capsule_with_digest()
-    registry.publish(original, Principal("publisher"))
-    changed = original.model_copy(
-        update={
-            "detached_signature": original.detached_signature.model_copy(
-                update={"value": "base64:AQ=="}
-            )
-        }
+    registry, _, _, harness = setup_registry(tmp_path)
+    validated = harness.promote_source()
+    original_draft = harness.build_draft(validated_atom=validated)
+    harness.publish(original_draft, registry)
+    changed_draft = harness.build_draft(
+        validated_atom=validated,
+        detached_signature={
+            "algorithm": "m3-test-only",
+            "key_id": "m3-test-key",
+            "value": "changed-test-signature",
+            "envelope": {"x-purpose": "M2 test-contract migration"},
+        },
+    )
+    assert (
+        changed_draft.capsule.control_manifest.content_digest
+        == original_draft.capsule.control_manifest.content_digest
     )
     with pytest.raises(PublicationConflict):
-        registry.publish(changed, Principal("publisher"))
+        harness.publish(changed_draft, registry)
 
 
 def test_publish_revalidates_model_copy_that_bypassed_nested_invariants(
     tmp_path: Path,
 ) -> None:
-    registry, _, _ = setup_registry(tmp_path)
+    registry, _, _, _ = setup_registry(tmp_path)
     capsule = capsule_with_digest()
     bypassed = capsule.model_copy(
         update={
@@ -170,22 +195,24 @@ def test_publish_revalidates_model_copy_that_bypassed_nested_invariants(
 
 
 def test_unauthorized_duplicate_publish_does_not_confirm_existence(tmp_path: Path) -> None:
-    registry, _, _ = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    registry.publish(capsule, Principal("publisher"))
+    registry, _, _, harness = setup_registry(tmp_path)
+    validated = harness.promote_source()
+    existing_draft = harness.build_draft(validated_atom=validated)
+    harness.publish(existing_draft, registry)
     with pytest.raises(RegistryAuthorizationError) as existing:
-        registry.publish(capsule, Principal("unknown"))
+        harness.publish(existing_draft, registry, Principal("unknown"))
 
-    absent_data = sample_capsule_data()
-    absent_data["control_manifest"]["capsule_id"] = "com.example.absent"
-    absent = capsule_with_digest(absent_data)
+    absent_draft = harness.build_draft(
+        validated_atom=validated,
+        capsule_id="com.example.absent",
+    )
     with pytest.raises(RegistryAuthorizationError) as missing:
-        registry.publish(absent, Principal("unknown"))
+        harness.publish(absent_draft, registry, Principal("unknown"))
     assert str(existing.value) == str(missing.value)
 
 
 def test_access_policy_can_only_narrow_resolver_permission(tmp_path: Path) -> None:
-    registry, _, resolver = setup_registry(tmp_path)
+    registry, _, resolver, _ = setup_registry(tmp_path)
     capsule = capsule_with_digest()
     resolver.grant("restricted-publisher", "publish", policies=frozenset())
     with pytest.raises(RegistryAuthorizationError):
@@ -193,10 +220,16 @@ def test_access_policy_can_only_narrow_resolver_permission(tmp_path: Path) -> No
 
 
 def test_malformed_policy_resolver_decision_fails_closed(tmp_path: Path) -> None:
-    registry, cas, _ = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    registry.publish(capsule, Principal("publisher"))
-    malformed = Registry(registry.database_path, cas, MalformedResolver())
+    registry, cas, _, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    capsule = draft.capsule
+    harness.publish(draft, registry)
+    malformed = Registry(
+        registry.database_path,
+        cas,
+        MalformedResolver(),
+        trust_root=harness.authority.trust_root(),
+    )
     digest = capsule.evidence_plane.records[0].content_digest
 
     with pytest.raises(RegistryNotFound):
@@ -210,16 +243,17 @@ def test_malformed_policy_resolver_decision_fails_closed(tmp_path: Path) -> None
 
 
 def test_orphan_blob_and_unpublished_reference_are_not_readable(tmp_path: Path) -> None:
-    registry, cas, _ = setup_registry(tmp_path)
+    registry, cas, _, _ = setup_registry(tmp_path)
     orphan = cas.put_blob(b"orphan", "text/plain")
     with pytest.raises(BlobAuthorizationError):
         registry.get_blob(orphan.digest, Principal("reader"))
 
 
 def test_published_blob_read_uses_grant_and_revalidates_tamper(tmp_path: Path) -> None:
-    registry, cas, _ = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    registry.publish(capsule, Principal("publisher"))
+    registry, cas, _, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    capsule = draft.capsule
+    harness.publish(draft, registry)
     digest = capsule.evidence_plane.records[0].content_digest
     assert registry.get_blob(digest, Principal("reader")) == CAS_BYTES
     path = cas.object_path(digest)
@@ -230,9 +264,10 @@ def test_published_blob_read_uses_grant_and_revalidates_tamper(tmp_path: Path) -
 
 
 def test_registry_rejects_cas_media_type_header_tamper(tmp_path: Path) -> None:
-    registry, cas, _ = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    registry.publish(capsule, Principal("publisher"))
+    registry, cas, _, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    capsule = draft.capsule
+    harness.publish(draft, registry)
     digest = capsule.evidence_plane.records[0].content_digest
     path = cas.object_path(digest)
     raw = path.read_bytes()
@@ -263,18 +298,20 @@ def test_registry_rejects_cas_media_type_header_tamper(tmp_path: Path) -> None:
 def test_shared_blob_grants_are_union_of_individually_authorized_publications(
     tmp_path: Path,
 ) -> None:
-    registry, _, resolver = setup_registry(tmp_path)
-    first = capsule_with_digest()
-    registry.publish(first, Principal("publisher"))
+    registry, _, resolver, harness = setup_registry(tmp_path)
+    validated = harness.promote_source()
+    first_draft = harness.build_draft(validated_atom=validated)
+    first = first_draft.capsule
+    harness.publish(first_draft, registry)
 
-    second_data = sample_capsule_data()
-    second_data["control_manifest"]["capsule_id"] = "com.example.second"
-    second_data["control_manifest"]["authority"] = "other-authority"
-    second_data["semantic_payload"]["atoms"][0]["authority"] = "other-authority"
-    second = capsule_with_digest(second_data)
+    second_draft = harness.build_draft(
+        validated_atom=validated,
+        capsule_id="com.example.second",
+        authority="other-authority",
+    )
     resolver.grant("publisher", "publish", "other-authority")
     resolver.grant("other-reader", "read", "other-authority")
-    registry.publish(second, Principal("publisher"))
+    harness.publish(second_draft, registry)
 
     digest = first.evidence_plane.records[0].content_digest
     assert registry.get_blob(digest, Principal("reader")) == CAS_BYTES
@@ -286,15 +323,15 @@ def test_shared_blob_grants_are_union_of_individually_authorized_publications(
 def test_transaction_failure_rolls_back_publication_references_and_grants(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    registry, _, _ = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
+    registry, _, _, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
 
     def fail(*args: object, **kwargs: object) -> None:
         raise RuntimeError("injected grant failure")
 
     monkeypatch.setattr(registry, "_insert_grants", fail)
     with pytest.raises(RuntimeError, match="injected"):
-        registry.publish(capsule, Principal("publisher"))
+        harness.publish(draft, registry)
     assert registry._table_counts() == {
         "publications": 0,
         "evidence_references": 0,
@@ -305,7 +342,7 @@ def test_transaction_failure_rolls_back_publication_references_and_grants(
 def test_cas_integrity_failure_inside_publish_leaves_no_registry_rows(
     tmp_path: Path,
 ) -> None:
-    registry, cas, _ = setup_registry(tmp_path)
+    registry, cas, _, _ = setup_registry(tmp_path)
     capsule = capsule_with_digest()
     cas.object_path(capsule.evidence_plane.records[0].content_digest).unlink()
     with pytest.raises(BlobIntegrityError):
@@ -318,7 +355,7 @@ def test_cas_integrity_failure_inside_publish_leaves_no_registry_rows(
 
 
 def test_publish_does_not_mutate_lifecycle_to_published(tmp_path: Path) -> None:
-    registry, _, _ = setup_registry(tmp_path)
+    registry, _, _, _ = setup_registry(tmp_path)
     data = sample_capsule_data()
     data["control_manifest"]["lifecycle"] = "VALIDATED"
     capsule = capsule_with_digest(data)
@@ -329,20 +366,21 @@ def test_publish_does_not_mutate_lifecycle_to_published(tmp_path: Path) -> None:
 
 
 def test_registry_detects_missing_reference_row_instead_of_repairing_it(tmp_path: Path) -> None:
-    registry, _, _ = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    registry.publish(capsule, Principal("publisher"))
+    registry, _, _, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    harness.publish(draft, registry)
     with sqlite3.connect(registry.database_path) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("DELETE FROM digest_grants")
     with pytest.raises(PublicationIntegrityError):
-        registry.publish(capsule, Principal("publisher"))
+        harness.publish(draft, registry)
 
 
 def test_registry_get_missing_and_unauthorized_are_both_non_disclosing(tmp_path: Path) -> None:
-    registry, _, _ = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    registry.publish(capsule, Principal("publisher"))
+    registry, _, _, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    capsule = draft.capsule
+    harness.publish(draft, registry)
     with pytest.raises(RegistryNotFound) as denied:
         registry.get(
             capsule.control_manifest.capsule_id,
@@ -355,9 +393,10 @@ def test_registry_get_missing_and_unauthorized_are_both_non_disclosing(tmp_path:
 
 
 def test_blob_access_policy_cannot_expand_a_resolver_read_grant(tmp_path: Path) -> None:
-    registry, _, resolver = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    registry.publish(capsule, Principal("publisher"))
+    registry, _, resolver, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    capsule = draft.capsule
+    harness.publish(draft, registry)
     resolver.grant("narrow-reader", "read", policies=frozenset())
     digest = capsule.evidence_plane.records[0].content_digest
     with pytest.raises(BlobAuthorizationError):
@@ -365,9 +404,9 @@ def test_blob_access_policy_cannot_expand_a_resolver_read_grant(tmp_path: Path) 
 
 
 def test_tampered_grant_cannot_authorize_an_unreferenced_cas_object(tmp_path: Path) -> None:
-    registry, cas, _ = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    registry.publish(capsule, Principal("publisher"))
+    registry, cas, _, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    harness.publish(draft, registry)
     orphan = cas.put_blob(b"other secret", "text/plain")
     with sqlite3.connect(registry.database_path) as connection:
         connection.execute("UPDATE digest_grants SET digest = ?", (orphan.digest,))
@@ -376,9 +415,10 @@ def test_tampered_grant_cannot_authorize_an_unreferenced_cas_object(tmp_path: Pa
 
 
 def test_unauthorized_get_does_not_expose_corrupt_existing_record(tmp_path: Path) -> None:
-    registry, _, _ = setup_registry(tmp_path)
-    capsule = capsule_with_digest()
-    registry.publish(capsule, Principal("publisher"))
+    registry, _, _, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    capsule = draft.capsule
+    harness.publish(draft, registry)
     with sqlite3.connect(registry.database_path) as connection:
         connection.execute(
             "UPDATE publications SET immutable_record_jcs = ?",

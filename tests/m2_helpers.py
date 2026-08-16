@@ -3,8 +3,21 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from contractcapsule.audit.quarantine import (
+        ApprovalAuthority,
+        QuarantineStore,
+        ValidatedAtom,
+    )
+    from contractcapsule.build.publish import DraftCapsule
+    from contractcapsule.models import Principal
+    from contractcapsule.storage.cas import FilesystemCAS
+    from contractcapsule.storage.registry import PublishedCapsule, Registry
 
 ZERO_DIGEST = "sha256:" + ("0" * 64)
 CAS_BYTES = b"authoritative evidence\n"
@@ -352,3 +365,113 @@ def write_package(
         blob_path.parent.mkdir(parents=True, exist_ok=True)
         blob_path.write_bytes(CAS_BYTES)
     return package, raw
+
+
+@dataclass(slots=True)
+class TrustedM3TestHarness:
+    """Build P0/P1 Registry fixtures through the real M3 trust pipeline."""
+
+    root: Path
+    cas: FilesystemCAS
+    authority: ApprovalAuthority
+    store: QuarantineStore
+    principal: Principal
+    _source_index: int = 0
+    _package_index: int = 0
+
+    @classmethod
+    def create(
+        cls,
+        root: Path,
+        cas: FilesystemCAS,
+        *,
+        principal_id: str = "publisher",
+    ) -> TrustedM3TestHarness:
+        from contractcapsule.audit.quarantine import ApprovalAuthority, QuarantineStore
+        from contractcapsule.models import Principal
+
+        authority = ApprovalAuthority({"reviewer": b"m2-migration-test-secret"})
+        return cls(
+            root=Path(root).resolve(),
+            cas=cas,
+            authority=authority,
+            store=QuarantineStore(trust_root=authority.trust_root()),
+            principal=Principal(principal_id),
+        )
+
+    def promote_source(self, source_bytes: bytes = CAS_BYTES) -> ValidatedAtom:
+        from contractcapsule.build.atomize import (
+            bind_evidence,
+            extract_candidate_atoms,
+        )
+        from contractcapsule.build.ingest import SourceInput, snapshot_source
+
+        self._source_index += 1
+        source_path = self.root / "m3-trusted-sources" / f"source-{self._source_index}.txt"
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_bytes(source_bytes)
+        snapshot = snapshot_source(
+            SourceInput(
+                path=source_path,
+                mode="CAS",
+                access_policy="team-auth",
+                cas=self.cas,
+                quarantine=self.store,
+                generated=True,
+            ),
+            self.principal,
+        )
+        candidate = extract_candidate_atoms(snapshot)[0]
+        binding = bind_evidence(candidate, snapshot)
+        approval = self.authority.issue(candidate, (binding,), "reviewer")
+        return self.store.promote(candidate.candidate_id, approval)
+
+    def build_draft(
+        self,
+        *,
+        validated_atom: ValidatedAtom | None = None,
+        source_bytes: bytes = CAS_BYTES,
+        capsule_id: str = "com.example.auth-policy",
+        version: str = "2.3.0",
+        authority: str = "approved-project-policy",
+        detached_signature: Mapping[str, Any] | None = None,
+    ) -> DraftCapsule:
+        from contractcapsule.build.publish import BuildRequest, build_capsule
+
+        atom = validated_atom or self.promote_source(source_bytes)
+        self._package_index += 1
+        package_path = (
+            self.root / "m3-trusted-packages" / f"package-{self._package_index}"
+        )
+        signature = detached_signature or {
+            "algorithm": "m3-test-only",
+            "key_id": "m3-test-key",
+            "value": "test-signature-not-production",
+            "envelope": {"x-purpose": "M2 test-contract migration"},
+        }
+        return build_capsule(
+            BuildRequest(
+                atoms=(atom,),
+                quarantine=self.store,
+                capsule_id=capsule_id,
+                version=version,
+                owner="team-auth",
+                tenant="example",
+                authority=authority,
+                sensitivity="internal",
+                lifecycle="PUBLISHED",
+                environments=("dev", "staging", "prod"),
+                package_path=package_path,
+                detached_signature=signature,
+            )
+        )
+
+    def publish(
+        self,
+        draft: DraftCapsule,
+        registry: Registry,
+        principal: Principal | None = None,
+    ) -> PublishedCapsule:
+        from contractcapsule.build.publish import publish_draft
+
+        return publish_draft(draft, principal or self.principal, registry)

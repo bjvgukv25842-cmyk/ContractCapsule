@@ -5,7 +5,12 @@ from contractcapsule.build.atomize import (
     extract_candidate_atoms,
     render_evidence,
 )
-from contractcapsule.build.ingest import SourceInput, SourceSnapshot, snapshot_source
+from contractcapsule.build.ingest import (
+    SourceInput,
+    SourceSnapshot,
+    TrustedDeterministicCollector,
+    snapshot_source,
+)
 from contractcapsule.build.publish import (
     BuildError,
     BuildRequest,
@@ -20,6 +25,7 @@ __all__ = [
     "DraftCapsule",
     "SourceInput",
     "SourceSnapshot",
+    "TrustedDeterministicCollector",
     "bind_evidence",
     "build_capsule",
     "extract_candidate_atoms",

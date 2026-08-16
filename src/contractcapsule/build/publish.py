@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import hmac
 import json
 import os
+import secrets
 import shutil
 import tempfile
 from collections.abc import Mapping
@@ -16,25 +18,294 @@ from typing import Any
 import yaml
 
 from contractcapsule.audit.quarantine import (
+    CandidateAtom,
     EvidenceBinding,
     QuarantineError,
     QuarantineStore,
     ValidatedAtom,
+    binding_digest_for,
+    candidate_digest_for,
     scan_secrets,
 )
 from contractcapsule.models import Capsule, Principal
-from contractcapsule.models.canonical import canonical_digest, capsule_wire_dict
+from contractcapsule.models.canonical import (
+    canonical_digest,
+    canonical_json_bytes,
+    capsule_wire_dict,
+)
 from contractcapsule.package import load_capsule
 from contractcapsule.storage.registry import PublishedCapsule, Registry
 
 _ZERO_DIGEST = "sha256:" + "0" * 64
 _BUILDER_TEST_BYTES = b'{"check":"m3-source-grounding"}\n'
 _BUILDER_TEST_DIGEST = "sha256:" + hashlib.sha256(_BUILDER_TEST_BYTES).hexdigest()
-_LOADER_RECEIPT = object()
+_LOADER_PIPELINE = (
+    "strict-json",
+    "json-schema",
+    "python-semantics",
+    "digest-and-reference-integrity",
+    "load_capsule",
+)
+_LOADER_PROFILE = "CCS-2.1-m3-loader-v1"
 
 
 class BuildError(QuarantineError):
     """A complete source-grounded Capsule could not be built safely."""
+
+
+def _loader_receipt_payload(
+    capsule_digest: str,
+    publication_digest: str,
+    package_path: str | None,
+    store_id: str,
+    receipt_id: str,
+) -> dict[str, Any]:
+    return {
+        "profile": _LOADER_PROFILE,
+        "capsule_digest": capsule_digest,
+        "publication_digest": publication_digest,
+        "package_path": package_path,
+        "store_id": store_id,
+        "receipt_id": receipt_id,
+    }
+
+
+def _loader_attestation_payload(
+    capsule_digest: str,
+    publication_digest: str,
+    package_path: str | None,
+    store_id: str,
+) -> dict[str, Any]:
+    return {
+        "profile": _LOADER_PROFILE,
+        "capsule_digest": capsule_digest,
+        "publication_digest": publication_digest,
+        "pipeline": list(_LOADER_PIPELINE),
+        "package_path": package_path,
+        "store_id": store_id,
+    }
+
+
+def _loader_publication_digest(capsule: Capsule) -> str:
+    """Hash the exact immutable publication projection crossed by the loader.
+
+    CCS canonical identity intentionally excludes detached signatures.  The M3 loader
+    gate still needs to bind that persisted publication field, while continuing to
+    exclude only re-buildable derived artifacts and runtime sidecars.
+    """
+
+    projection = capsule_wire_dict(capsule)
+    projection.pop("derived_artifacts", None)
+    projection.pop("runtime_sidecar", None)
+    return "sha256:" + hashlib.sha256(canonical_json_bytes(projection)).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class _LoaderReceipt:
+    capsule_digest: str
+    capability: object = field(repr=False, compare=False)
+    publication_digest: str = field(default="", repr=False, compare=False)
+    package_path: str | None = field(default=None, repr=False, compare=False)
+    store_id: str = field(default="", repr=False, compare=False)
+    proof: str = field(default="", repr=False, compare=False)
+    receipt_id: str = field(default_factory=lambda: "loader-" + secrets.token_hex(16))
+
+    def matches(
+        self,
+        capsule: Capsule,
+        capability: object | None = None,
+        package_path: Path | None = None,
+        store_id: str | None = None,
+    ) -> bool:
+        package_identity = str(package_path.resolve()) if package_path is not None else None
+        payload = _loader_receipt_payload(
+            self.capsule_digest,
+            self.publication_digest,
+            self.package_path,
+            self.store_id,
+            self.receipt_id,
+        )
+        return (
+            (capability is None or self.capability is capability)
+            and self.capsule_digest == capsule.control_manifest.content_digest
+            and self.publication_digest == _loader_publication_digest(capsule)
+            and self.package_path == package_identity
+            and (store_id is None or self.store_id == store_id)
+            and bool(self.store_id)
+            and bool(self.proof)
+            and _VERIFY_LOADER_SIGNATURE(payload, self.proof)
+        )
+
+
+def _make_loader_service() -> tuple[Any, Any, Any]:
+    """Create the process-local loader capability service.
+
+    The signing key and signing operation stay inside closures.  The only operation
+    that can mint a receipt first executes ``load_capsule``; callers can therefore
+    construct a dataclass-shaped receipt, but cannot mint a valid proof without a
+    real loader pass through this service.
+    """
+
+    key = secrets.token_bytes(32)
+
+    def sign(payload: Mapping[str, Any]) -> str:
+        message = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        value = hmac.new(key, message, hashlib.sha256).hexdigest()
+        return "loader-hmac-sha256:" + value
+
+    def verify(payload: Mapping[str, Any], signature: str) -> bool:
+        if not isinstance(signature, str) or not signature.startswith(
+            "loader-hmac-sha256:"
+        ):
+            return False
+        return hmac.compare_digest(signature, sign(payload))
+
+    def load_and_issue(
+        root: Path,
+        package_path: Path | None,
+        store_id: str,
+        capability: object,
+    ) -> tuple[Capsule, _LoaderReceipt]:
+        loaded = load_capsule(root)
+        package_identity = (
+            str(package_path.resolve()) if package_path is not None else None
+        )
+        receipt_id = "loader-" + secrets.token_hex(16)
+        proof = sign(
+            _loader_receipt_payload(
+                loaded.control_manifest.content_digest,
+                _loader_publication_digest(loaded),
+                package_identity,
+                store_id,
+                receipt_id,
+            )
+        )
+        return loaded, _LoaderReceipt(
+            capsule_digest=loaded.control_manifest.content_digest,
+            capability=capability,
+            publication_digest=_loader_publication_digest(loaded),
+            package_path=package_identity,
+            store_id=store_id,
+            proof=proof,
+            receipt_id=receipt_id,
+        )
+
+    def attest(
+        capsule: Capsule,
+        package_path: Path | None,
+        receipt: _LoaderReceipt,
+        store_id: str,
+        capability: object,
+    ) -> str:
+        package_identity = (
+            str(package_path.resolve()) if package_path is not None else None
+        )
+        if not receipt.matches(capsule, capability, package_path, store_id):
+            raise BuildError("loader receipt does not match the loaded Capsule")
+        return sign(
+            _loader_attestation_payload(
+                capsule.control_manifest.content_digest,
+                _loader_publication_digest(capsule),
+                package_identity,
+                store_id,
+            )
+        )
+
+    return load_and_issue, attest, verify
+
+
+_LOAD_AND_ISSUE_RECEIPT, _ATTEST_LOADED, _VERIFY_LOADER_SIGNATURE = (
+    _make_loader_service()
+)
+
+
+@dataclass(frozen=True, slots=True)
+class LoaderAttestation:
+    """Trust-root signed proof that the exact Capsule crossed ``load_capsule``."""
+
+    capsule_digest: str
+    publication_digest: str
+    pipeline: tuple[str, ...]
+    package_path: str | None
+    signature: str
+    store_id: str
+    _capability: object = field(default=None, repr=False, compare=False)
+    profile: str = _LOADER_PROFILE
+
+    def __post_init__(self) -> None:
+        if self.profile != _LOADER_PROFILE:
+            raise BuildError("loader attestation profile is invalid")
+        if self.pipeline != _LOADER_PIPELINE:
+            raise BuildError("loader attestation pipeline is incomplete")
+        if not isinstance(self.capsule_digest, str) or not self.capsule_digest.startswith(
+            "sha256:"
+        ):
+            raise BuildError("loader attestation digest is invalid")
+        if not isinstance(self.publication_digest, str) or not self.publication_digest.startswith(
+            "sha256:"
+        ):
+            raise BuildError("loader attestation publication digest is invalid")
+        if not isinstance(self.signature, str) or not self.signature:
+            raise BuildError("loader attestation signature is required")
+        if not isinstance(self.store_id, str) or not self.store_id:
+            raise BuildError("loader attestation store identity is required")
+
+    def payload(self) -> dict[str, Any]:
+        return {
+            "profile": self.profile,
+            "capsule_digest": self.capsule_digest,
+            "publication_digest": self.publication_digest,
+            "pipeline": list(self.pipeline),
+            "package_path": self.package_path,
+            "store_id": self.store_id,
+        }
+
+    def wire(self) -> dict[str, Any]:
+        payload = self.payload()
+        payload["signature"] = self.signature
+        return payload
+
+    def verify(self, trust_root: Any) -> bool:
+        del trust_root
+        return _VERIFY_LOADER_SIGNATURE(self.payload(), self.signature)
+
+    @classmethod
+    def verify_wire(cls, wire: Mapping[str, Any]) -> bool:
+        try:
+            attestation = cls(
+                capsule_digest=wire["capsule_digest"],
+                publication_digest=wire["publication_digest"],
+                pipeline=tuple(wire["pipeline"]),
+                package_path=wire.get("package_path"),
+                signature=wire["signature"],
+                store_id=wire["store_id"],
+            )
+        except (BuildError, KeyError, TypeError, ValueError):
+            return False
+        return attestation.verify(None)
+
+
+def _loader_attestation(
+    capsule: Capsule,
+    package_path: Path | None,
+    receipt: _LoaderReceipt,
+    store_id: str,
+    capability: object,
+) -> LoaderAttestation:
+    package_identity = str(package_path.resolve()) if package_path is not None else None
+    return LoaderAttestation(
+        capsule_digest=capsule.control_manifest.content_digest,
+        publication_digest=_loader_publication_digest(capsule),
+        pipeline=_LOADER_PIPELINE,
+        package_path=package_identity,
+        signature=_ATTEST_LOADED(
+            capsule, package_path, receipt, store_id, capability
+        ),
+        store_id=store_id,
+        _capability=capability,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,25 +338,62 @@ class DraftCapsule:
     capsule: Capsule
     atom_ids: tuple[str, ...]
     package_path: Path | None
-    validation_pipeline: tuple[str, ...] = (
-        "strict-json",
-        "json-schema",
-        "python-semantics",
-        "digest-and-reference-integrity",
-        "load_capsule",
+    validation_pipeline: tuple[str, ...] = _LOADER_PIPELINE
+    _loader_receipt: _LoaderReceipt | None = field(default=None, repr=False, compare=False)
+    _loader_attestation: LoaderAttestation | None = field(
+        default=None, repr=False, compare=False
     )
-    _loader_receipt: object | None = field(default=None, repr=False, compare=False)
+    _quarantine: QuarantineStore | None = field(default=None, repr=False, compare=False)
+    _validated_atoms: tuple[ValidatedAtom, ...] = field(
+        default=(), repr=False, compare=False
+    )
 
 
 def _approval_extension(atom: ValidatedAtom) -> dict[str, Any]:
     approval = atom.approval
+    candidate = CandidateAtom(
+        candidate_id=atom.candidate_id,
+        atom_id=atom.atom_id,
+        kind=atom.kind,
+        statement=atom.statement,
+        modality=atom.modality,
+        scope=atom.scope,
+        source_snapshot_id=atom.source_snapshot_id,
+        start_line=atom.start_line,
+        end_line=atom.end_line,
+        symbol_or_heading=atom.symbol_or_heading,
+        compression_class=atom.compression_class,
+        generated=atom.generated,
+        trust_level=atom.source_trust_level,
+    )
+    candidate_wire = {
+        "candidate_id": atom.candidate_id,
+        "atom_id": atom.atom_id,
+        "kind": atom.kind,
+        "statement": atom.statement,
+        "modality": atom.modality,
+        "scope": list(atom.scope),
+        "source_snapshot_id": atom.source_snapshot_id,
+        "start_line": atom.start_line,
+        "end_line": atom.end_line,
+        "symbol_or_heading": atom.symbol_or_heading,
+        "compression_class": atom.compression_class,
+        "generated": atom.generated,
+        "status": "candidate",
+        "source_trust_level": atom.source_trust_level,
+        "validated_trust_level": atom.trust_level,
+        "validated_status": atom.status,
+    }
     return {
         "x-trust": {
             "level": atom.trust_level,
             "source_level": atom.source_trust_level,
             "candidate_id": atom.candidate_id,
+            "candidate_digest": candidate_digest_for(candidate),
+            "candidate": candidate_wire,
             "approval": {
                 "approval_id": approval.approval_id,
+                "candidate_id": approval.candidate_id,
                 "approver_id": approval.approver_id,
                 "approved_at": approval.approved_at,
                 "decision": approval.decision,
@@ -128,6 +436,7 @@ def _binding_extension(binding: EvidenceBinding) -> dict[str, Any]:
     return {
         "x-source-map": {
             "binding_id": binding.binding_id,
+            "candidate_id": binding.candidate_id,
             "snapshot_id": binding.snapshot_id,
             "mode": binding.mode,
             "content_digest": binding.content_digest,
@@ -136,6 +445,15 @@ def _binding_extension(binding: EvidenceBinding) -> dict[str, Any]:
             "start_line": binding.start_line,
             "end_line": binding.end_line,
             "span_digest": binding.span_digest,
+            "binding_digest": binding_digest_for(binding),
+            "repository": binding.repository,
+            "revision": binding.revision,
+            "uri": binding.uri,
+            "source": binding.source,
+            "verification_method": binding.verification_method,
+            "access_policy": binding.access_policy,
+            "media_type": binding.media_type,
+            "captured_at": binding.captured_at,
         }
     }
 
@@ -245,7 +563,10 @@ def _default_core(request: BuildRequest) -> dict[str, Any]:
                 "lock": "integrity/capsule.lock",
                 "signature": "integrity/signature.json" if signature else None,
             },
-            "extensions": {"x-builder-profile": "CCS-2.1-m3-v1"},
+            "extensions": {
+                "x-builder-profile": "CCS-2.1-m3-v1",
+                "x-m3-trust-required": True,
+            },
         },
         "semantic_payload": {"atoms": [], "extensions": {}},
         "evidence_plane": {"records": [], "extensions": {}},
@@ -355,7 +676,7 @@ def _default_core(request: BuildRequest) -> dict[str, Any]:
 def _raw_template(request: BuildRequest) -> dict[str, Any]:
     if request.template is None:
         raw = _default_core(request)
-    elif isinstance(request.template, Capsule):
+    elif type(request.template) is Capsule:
         raw = capsule_wire_dict(request.template)
     elif isinstance(request.template, Mapping):
         try:
@@ -371,7 +692,9 @@ def _raw_template(request: BuildRequest) -> dict[str, Any]:
     return raw
 
 
-def _assemble(request: BuildRequest) -> tuple[Capsule, dict[str, bytes]]:
+def _collect_evidence(
+    request: BuildRequest,
+) -> tuple[list[dict[str, Any]], dict[str, bytes]]:
     if not request.atoms:
         raise BuildError("at least one validated atom is required")
     if request.quarantine is None:
@@ -380,7 +703,7 @@ def _assemble(request: BuildRequest) -> tuple[Capsule, dict[str, bytes]]:
     records: list[dict[str, Any]] = []
     blobs: dict[str, bytes] = {}
     for atom in request.atoms:
-        if not isinstance(atom, ValidatedAtom):
+        if type(atom) is not ValidatedAtom:
             raise BuildError("raw candidates cannot enter a capsule payload")
         request.quarantine.verify_validated(atom)
         if atom.atom_id in seen_atoms:
@@ -395,7 +718,12 @@ def _assemble(request: BuildRequest) -> tuple[Capsule, dict[str, bytes]]:
                         "one CAS digest maps to inconsistent evidence bytes"
                     )
                 blobs[binding.content_digest] = binding.source_bytes
-    raw = _raw_template(request)
+    return records, blobs
+
+
+def _populate_payload(
+    raw: dict[str, Any], request: BuildRequest, records: list[dict[str, Any]]
+) -> None:
     semantic_extensions = (
         raw.get("semantic_payload", {}).get("extensions", {})
         if isinstance(raw.get("semantic_payload"), Mapping)
@@ -415,6 +743,9 @@ def _assemble(request: BuildRequest) -> tuple[Capsule, dict[str, bytes]]:
         "extensions": evidence_extensions,
     }
     raw["dependency_graph"] = {"edges": [], "extensions": {}}
+
+
+def _configure_manifest(raw: dict[str, Any], request: BuildRequest) -> list[str]:
     manifest = raw.get("control_manifest")
     if not isinstance(manifest, dict):
         raise BuildError("template manifest is missing")
@@ -430,6 +761,15 @@ def _assemble(request: BuildRequest) -> tuple[Capsule, dict[str, bytes]]:
             "lifecycle": request.lifecycle,
             "created_from": created_from,
             "content_digest": _ZERO_DIGEST,
+        }
+    )
+    extensions = manifest.get("extensions")
+    if not isinstance(extensions, dict):
+        raise BuildError("template manifest extensions are invalid")
+    extensions.update(
+        {
+            "x-builder-profile": "CCS-2.1-m3-v1",
+            "x-m3-trust-required": True,
         }
     )
     manifest["scope"] = {
@@ -449,6 +789,12 @@ def _assemble(request: BuildRequest) -> tuple[Capsule, dict[str, bytes]]:
     elif request.template is None:
         raw["detached_signature"] = None
         manifest["integrity"]["signature"] = None
+    return created_from
+
+
+def _configure_integrity(
+    raw: dict[str, Any], created_from: list[str]
+) -> None:
     tests_integrity = raw.get("tests_integrity")
     if not isinstance(tests_integrity, dict):
         raise BuildError("template tests and integrity module is missing")
@@ -472,6 +818,9 @@ def _assemble(request: BuildRequest) -> tuple[Capsule, dict[str, bytes]]:
     ]
     raw["derived_artifacts"] = {}
     raw["runtime_sidecar"] = {}
+
+
+def _validate_assembled(raw: dict[str, Any]) -> Capsule:
     try:
         candidate = Capsule.model_validate_json(
             json.dumps(raw, ensure_ascii=False, allow_nan=False)
@@ -489,7 +838,16 @@ def _assemble(request: BuildRequest) -> tuple[Capsule, dict[str, bytes]]:
         raise BuildError(
             "digested capsule failed canonical model validation"
         ) from error
-    return complete, blobs
+    return complete
+
+
+def _assemble(request: BuildRequest) -> tuple[Capsule, dict[str, bytes]]:
+    records, blobs = _collect_evidence(request)
+    raw = _raw_template(request)
+    _populate_payload(raw, request, records)
+    created_from = _configure_manifest(raw, request)
+    _configure_integrity(raw, created_from)
+    return _validate_assembled(raw), blobs
 
 
 def _json_bytes(value: Any) -> bytes:
@@ -507,6 +865,12 @@ def _json_bytes(value: Any) -> bytes:
 
 def _write_package(root: Path, capsule: Capsule, blobs: Mapping[str, bytes]) -> None:
     raw = capsule_wire_dict(capsule)
+    # Scan the complete serialized package projection and every evidence object
+    # before creating any visible package files. This covers extensions,
+    # signatures, policies, tests, and other fields beyond atom statements.
+    scan_secrets(_json_bytes(raw))
+    for data in blobs.values():
+        scan_secrets(data)
     paths = {
         "payload": root / "payload",
         "evidence": root / "evidence",
@@ -565,7 +929,6 @@ def _write_package(root: Path, capsule: Capsule, blobs: Mapping[str, bytes]) -> 
             _json_bytes({"extensions": evidence_extensions})
         )
     for digest, data in blobs.items():
-        scan_secrets(data)
         hex_digest = digest.removeprefix("sha256:")
         destination = root / "evidence/blobs/sha256" / hex_digest[:2] / hex_digest[2:]
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -573,15 +936,29 @@ def _write_package(root: Path, capsule: Capsule, blobs: Mapping[str, bytes]) -> 
 
 
 def _validate_through_loader(
-    capsule: Capsule, blobs: Mapping[str, bytes], package_path: Path | None
-) -> tuple[Capsule, Path | None]:
+    capsule: Capsule,
+    blobs: Mapping[str, bytes],
+    package_path: Path | None,
+    loader_capability: object,
+    store_id: str,
+) -> tuple[Capsule, Path | None, _LoaderReceipt]:
     if package_path is None:
-        with tempfile.TemporaryDirectory(
-            prefix="contractcapsule-m3-"
-        ) as temporary_name:
-            root = Path(temporary_name).resolve()
-            _write_package(root, capsule, blobs)
-            return load_capsule(root), None
+        # Keep the validated package available through the final Registry commit.
+        # A transient path (or an attestation with ``package_path=None``) would
+        # leave the final gate dependent on an in-memory receipt rather than on
+        # authoritative bytes that can be loaded again.
+        temporary_path = Path(
+            tempfile.mkdtemp(prefix="contractcapsule-m3-")
+        ).resolve()
+        try:
+            _write_package(temporary_path, capsule, blobs)
+            loaded, receipt = _LOAD_AND_ISSUE_RECEIPT(
+                temporary_path, temporary_path, store_id, loader_capability
+            )
+            return loaded, temporary_path, receipt
+        except Exception:
+            shutil.rmtree(temporary_path, ignore_errors=True)
+            raise
     destination = Path(package_path).resolve(strict=False)
     if destination.exists():
         raise BuildError("package destination must not already exist")
@@ -591,9 +968,15 @@ def _validate_through_loader(
     ).resolve()
     try:
         _write_package(temporary_path, capsule, blobs)
-        loaded = load_capsule(temporary_path)
+        loaded, receipt = _LOAD_AND_ISSUE_RECEIPT(
+            temporary_path, destination, store_id, loader_capability
+        )
         os.rename(temporary_path, destination)
-        return loaded, destination
+        return (
+            loaded,
+            destination,
+            receipt,
+        )
     except Exception:
         shutil.rmtree(temporary_path, ignore_errors=True)
         raise
@@ -602,17 +985,38 @@ def _validate_through_loader(
 def build_capsule(build_request: BuildRequest) -> DraftCapsule:
     """Build and validate one capsule through the public M2 package loader."""
 
-    if not isinstance(build_request, BuildRequest):
+    if type(build_request) is not BuildRequest:
         raise TypeError("build_request must be a BuildRequest")
+    store = build_request.quarantine
+    if store is None:
+        raise BuildError("an explicit quarantine trust boundary is required")
     capsule, blobs = _assemble(build_request)
-    loaded, package_path = _validate_through_loader(
-        capsule, blobs, build_request.package_path
+    loaded, package_path, receipt = _validate_through_loader(
+        capsule,
+        blobs,
+        build_request.package_path,
+        store._loader_capability(),
+        store._loader_identity,
+    )
+    attestation = (
+        _loader_attestation(
+            loaded,
+            package_path,
+            receipt,
+            store._loader_identity,
+            store._loader_capability(),
+        )
+        if store._has_trust_root()
+        else None
     )
     return DraftCapsule(
         loaded,
         tuple(atom.atom_id for atom in build_request.atoms),
         package_path,
-        _loader_receipt=_LOADER_RECEIPT,
+        _loader_receipt=receipt,
+        _loader_attestation=attestation,
+        _quarantine=build_request.quarantine,
+        _validated_atoms=tuple(build_request.atoms),
     )
 
 
@@ -621,10 +1025,36 @@ def publish_draft(
 ) -> PublishedCapsule:
     """Publish only a loader-validated PUBLISHED draft through the public M2 Registry."""
 
+    if type(registry) is not Registry:
+        raise TypeError("registry must be the sealed Registry implementation")
+    if type(principal) is not Principal:
+        raise TypeError("principal must be a Principal")
     if (
-        not isinstance(draft, DraftCapsule)
-        or draft._loader_receipt is not _LOADER_RECEIPT
-        or "load_capsule" not in draft.validation_pipeline
+        type(draft) is not DraftCapsule
+        or draft._loader_receipt is None
+        or draft._quarantine is None
+        or not draft._loader_receipt.matches(
+            draft.capsule,
+            draft._quarantine._loader_capability(),
+            draft.package_path,
+            draft._quarantine._loader_identity,
+        )
+        or draft.validation_pipeline != _LOADER_PIPELINE
+        or draft._loader_attestation is None
+        or not draft._validated_atoms
     ):
-        raise BuildError("publication requires a public-loader validated draft")
-    return registry.publish(draft.capsule, principal)
+        raise BuildError(
+            "publication requires a public-loader validated draft with quarantine context and loader attestation"
+        )
+    try:
+        permit = draft._quarantine.issue_publication_permit(
+            draft.capsule,
+            draft._validated_atoms,
+            principal,
+            loader_attestation=draft._loader_attestation,
+        )
+    except Exception as error:
+        if isinstance(error, BuildError):
+            raise
+        raise BuildError("publication trust permit could not be issued") from error
+    return registry.publish(draft.capsule, principal, publication_permit=permit)

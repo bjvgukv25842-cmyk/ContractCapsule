@@ -14,7 +14,11 @@ from contractcapsule.audit.quarantine import (
     SecretDetectedError,
 )
 from contractcapsule.build.atomize import bind_evidence, extract_candidate_atoms
-from contractcapsule.build.ingest import SourceInput, snapshot_source
+from contractcapsule.build.ingest import (
+    SourceInput,
+    TrustedDeterministicCollector,
+    snapshot_source,
+)
 from contractcapsule.build.publish import (
     BuildError,
     BuildRequest,
@@ -119,16 +123,21 @@ def test_git_binding_contains_commit_path_stable_heading_and_digests(
     git_source: tuple[Path, str, Principal],
 ) -> None:
     root, revision, principal = git_source
+    authority = ApprovalAuthority({"reviewer": b"test-secret"})
+    store = QuarantineStore(trust_root=authority.trust_root())
+    collector = TrustedDeterministicCollector(store, authority.trust_root())
     source = SourceInput(
         path=root / "policy.md",
         mode="GIT_IMMUTABLE",
         repository="https://example.invalid/project",
         revision=f"sha1:{revision}",
         repository_root=root,
+        quarantine=store,
     )
-    snapshot = snapshot_source(source, principal)
+    snapshot = collector.snapshot(source, principal)
     candidate = extract_candidate_atoms(snapshot)[0]
     binding = bind_evidence(candidate, snapshot)
+    assert candidate.trust_level == "T2"
     assert binding.mode == "GIT_IMMUTABLE"
     assert binding.repository == source.repository
     assert binding.revision == source.revision
@@ -140,7 +149,7 @@ def test_git_binding_contains_commit_path_stable_heading_and_digests(
 
 def test_external_immutable_source_is_offline_but_fully_bound(tmp_path: Path) -> None:
     authority = ApprovalAuthority({"reviewer": b"test-secret"})
-    store = QuarantineStore(approval_verifier=authority.verifier())
+    store = QuarantineStore(trust_root=authority.trust_root())
     snapshot = snapshot_source(
         SourceInput(
             mode="EXTERNAL_IMMUTABLE",
@@ -366,6 +375,7 @@ def test_public_build_validate_publish_pipeline_has_no_draft_bypass(
         tmp_path / "registry.sqlite3",
         FilesystemCAS(tmp_path / "cas"),
         resolver=_AllowPolicy(),
+        trust_root=authority.trust_root(),
     )
     published = publish_draft(draft, principal, registry)
     assert (
@@ -391,7 +401,7 @@ def test_public_pipeline_reuses_m2_cas_and_registry_authorization(
 ) -> None:
     principal = Principal("builder")
     authority = ApprovalAuthority({"reviewer": b"test-secret"})
-    store = QuarantineStore(approval_verifier=authority.verifier())
+    store = QuarantineStore(trust_root=authority.trust_root())
     cas = FilesystemCAS(tmp_path / "cas")
     source_path = tmp_path / "policy.md"
     source_path.write_text("# Policy\nThe service MUST use TLS.\n", encoding="utf-8")
@@ -423,7 +433,12 @@ def test_public_pipeline_reuses_m2_cas_and_registry_authorization(
             },
         )
     )
-    registry = Registry(tmp_path / "registry.sqlite3", cas, resolver=_AllowPolicy())
+    registry = Registry(
+        tmp_path / "registry.sqlite3",
+        cas,
+        resolver=_AllowPolicy(),
+        trust_root=authority.trust_root(),
+    )
     published = publish_draft(draft, principal, registry)
     assert registry.get_blob(snapshot.content_digest, principal) == snapshot.content
     assert published.registry_status == "PUBLISHED"
