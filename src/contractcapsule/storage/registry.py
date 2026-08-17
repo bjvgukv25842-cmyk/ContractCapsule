@@ -807,9 +807,9 @@ class Registry:
         return result
 
     @staticmethod
-    def _validate_source_subjects(
+    def _source_subject_inputs(
         payload: Mapping[str, Any], permit: Any
-    ) -> tuple[dict[str, Mapping[str, Any]], dict[str, bytes]]:
+    ) -> tuple[list[Any], tuple[bytes, ...] | list[bytes]]:
         source_subjects = payload.get("source_subjects")
         source_bytes = getattr(permit, "source_bytes", ())
         if (
@@ -821,11 +821,45 @@ class Registry:
             raise PublicationIntegrityError(
                 "M3 trust permit source subjects are missing"
             )
+        return source_subjects, source_bytes
+
+    @staticmethod
+    def _resolve_source_subject(
+        binding_id: str,
+        mode: Any,
+        retained_data: bytes,
+        proof_wires: Mapping[str, Mapping[str, Any]],
+        proofs: Mapping[str, Any],
+        resolved: dict[str, bytes],
+        used_proofs: set[str],
+    ) -> bytes:
+        if mode != "GIT_IMMUTABLE":
+            if binding_id in proof_wires:
+                raise ValueError("Git source proof mode is inconsistent")
+            return retained_data
+        wire = proof_wires.get(binding_id)
+        if wire is None:
+            raise ValueError("Git source proof is missing")
+        proof_key = _jcs_text(wire)
+        proof = proofs.get(proof_key)
+        if proof is None:
+            raise ValueError("trusted Git source resolver is missing")
+        if proof_key not in resolved:
+            from contractcapsule.build.ingest import _resolve_deterministic_git_source
+
+            resolved[proof_key] = _resolve_deterministic_git_source(proof)
+        used_proofs.add(proof_key)
+        return resolved[proof_key]
+
+    @staticmethod
+    def _validate_source_subjects(
+        payload: Mapping[str, Any], permit: Any
+    ) -> tuple[dict[str, Mapping[str, Any]], dict[str, bytes]]:
+        source_subjects, source_bytes = Registry._source_subject_inputs(payload, permit)
         subject_by_binding: dict[str, Mapping[str, Any]] = {}
         authoritative_by_binding: dict[str, bytes] = {}
         try:
             from contractcapsule.audit import quarantine as quarantine_module
-            from contractcapsule.build.ingest import _resolve_deterministic_git_source
 
             scanner = quarantine_module.scan_secrets
             proof_wires = Registry._git_proof_wires_by_binding(payload)
@@ -840,20 +874,15 @@ class Registry:
                 mode = subject.get("mode")
                 if not isinstance(binding_id, str):
                     raise TypeError("source subject binding identity is malformed")
-                if mode == "GIT_IMMUTABLE":
-                    wire = proof_wires.get(binding_id)
-                    if wire is None:
-                        raise ValueError("Git source proof is missing")
-                    proof_key = _jcs_text(wire)
-                    proof = proofs.get(proof_key)
-                    if proof is None:
-                        raise ValueError("trusted Git source resolver is missing")
-                    if proof_key not in resolved:
-                        resolved[proof_key] = _resolve_deterministic_git_source(proof)
-                    data = resolved[proof_key]
-                    used_proofs.add(proof_key)
-                elif binding_id in proof_wires:
-                    raise ValueError("Git source proof mode is inconsistent")
+                data = Registry._resolve_source_subject(
+                    binding_id,
+                    mode,
+                    data,
+                    proof_wires,
+                    proofs,
+                    resolved,
+                    used_proofs,
+                )
                 if (
                     binding_id in subject_by_binding
                     or digest != "sha256:" + hashlib.sha256(data).hexdigest()
@@ -996,6 +1025,71 @@ class Registry:
             "verification_method": record.get("verification_method"),
         }
 
+    def _authoritative_binding_data(
+        self,
+        binding: Mapping[str, Any],
+        authoritative_by_binding: Mapping[str, bytes],
+    ) -> bytes:
+        if binding["mode"] != "CAS":
+            data = authoritative_by_binding.get(binding["binding_id"])
+            if not isinstance(data, bytes):
+                raise PublicationIntegrityError(
+                    "M3 authoritative source binding mismatch"
+                )
+            return data
+        try:
+            from contractcapsule.audit import quarantine as quarantine_module
+
+            stored = self._cas._read_verified(binding["content_digest"])
+            quarantine_module.scan_secrets(stored.data)
+            return stored.data
+        except Exception as error:
+            raise PublicationIntegrityError("M3 CAS source scan failed") from error
+
+    @staticmethod
+    def _authoritative_line_span(
+        source_data: bytes, start_line: Any, end_line: Any
+    ) -> bytes:
+        text = source_data.decode("utf-8", errors="strict")
+        lines = text.splitlines(keepends=True)
+        if (
+            not isinstance(start_line, int)
+            or not isinstance(end_line, int)
+            or start_line < 1
+            or end_line < start_line
+            or end_line > len(lines)
+        ):
+            raise ValueError("authoritative source span is invalid")
+        return "".join(lines[start_line - 1 : end_line]).encode("utf-8")
+
+    @staticmethod
+    def _validate_authoritative_binding(
+        atom_wire: Mapping[str, Any], binding: Mapping[str, Any], source_data: bytes
+    ) -> None:
+        try:
+            if (
+                "sha256:" + hashlib.sha256(source_data).hexdigest()
+                != binding["content_digest"]
+            ):
+                raise ValueError("authoritative source digest mismatch")
+            span = Registry._authoritative_line_span(
+                source_data, binding["start_line"], binding["end_line"]
+            )
+            if (
+                "sha256:" + hashlib.sha256(span).hexdigest()
+                != binding["span_digest"]
+            ):
+                raise ValueError("authoritative source span digest mismatch")
+            statement = span.decode("utf-8", errors="strict").strip()
+            if statement.startswith("#"):
+                statement = statement.lstrip("#").strip().rstrip("#").strip()
+            if statement != atom_wire.get("statement", "").strip():
+                raise ValueError("authoritative source statement mismatch")
+        except Exception as error:
+            raise PublicationIntegrityError(
+                "M3 authoritative source binding mismatch"
+            ) from error
+
     def _validate_bindings(
         self,
         atom_wire: Mapping[str, Any],
@@ -1035,55 +1129,10 @@ class Registry:
                 for key in ("content_digest", "mode", "media_type", "snapshot_id")
             ):
                 raise PublicationIntegrityError("M3 source subject mismatch")
-            source_data: bytes | None
-            if binding["mode"] == "CAS":
-                try:
-                    from contractcapsule.audit import quarantine as quarantine_module
-
-                    stored = self._cas._read_verified(binding["content_digest"])
-                    quarantine_module.scan_secrets(stored.data)
-                    source_data = stored.data
-                except Exception as error:
-                    raise PublicationIntegrityError(
-                        "M3 CAS source scan failed"
-                    ) from error
-            else:
-                source_data = authoritative_by_binding.get(binding["binding_id"])
-            try:
-                if not isinstance(source_data, bytes):
-                    raise TypeError("authoritative source bytes are missing")
-                if (
-                    "sha256:" + hashlib.sha256(source_data).hexdigest()
-                    != binding["content_digest"]
-                ):
-                    raise ValueError("authoritative source digest mismatch")
-                text = source_data.decode("utf-8", errors="strict")
-                lines = text.splitlines(keepends=True)
-                start_line = binding["start_line"]
-                end_line = binding["end_line"]
-                if (
-                    not isinstance(start_line, int)
-                    or not isinstance(end_line, int)
-                    or start_line < 1
-                    or end_line < start_line
-                    or end_line > len(lines)
-                ):
-                    raise ValueError("authoritative source span is invalid")
-                span = "".join(lines[start_line - 1 : end_line]).encode("utf-8")
-                if (
-                    "sha256:" + hashlib.sha256(span).hexdigest()
-                    != binding["span_digest"]
-                ):
-                    raise ValueError("authoritative source span digest mismatch")
-                statement = span.decode("utf-8", errors="strict").strip()
-                if statement.startswith("#"):
-                    statement = statement.lstrip("#").strip().rstrip("#").strip()
-                if statement != atom_wire.get("statement", "").strip():
-                    raise ValueError("authoritative source statement mismatch")
-            except Exception as error:
-                raise PublicationIntegrityError(
-                    "M3 authoritative source binding mismatch"
-                ) from error
+            source_data = self._authoritative_binding_data(
+                binding, authoritative_by_binding
+            )
+            self._validate_authoritative_binding(atom_wire, binding, source_data)
             bindings.append(binding)
         if source_level == "T2" and (
             not isinstance(source_proof, Mapping)

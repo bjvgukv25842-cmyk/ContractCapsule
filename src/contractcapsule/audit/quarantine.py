@@ -1309,6 +1309,19 @@ class QuarantineStore:
                 "loader attestation was not issued by this quarantine"
             )
 
+    def _retain_source_proof(
+        self,
+        proof: DeterministicSourceProof | None,
+        retained: list[DeterministicSourceProof],
+    ) -> None:
+        if proof is None or proof in retained:
+            return
+        if not self._publication_issuer.owns_source_proof(proof):
+            raise QuarantineError(
+                "deterministic source proof is outside the publication issuer"
+            )
+        retained.append(proof)
+
     def issue_publication_permit(
         self,
         capsule: Any,
@@ -1358,12 +1371,7 @@ class QuarantineStore:
             entry, bindings, source_proof = self._permit_atom_entry(atom)
             entries.append(entry)
             self._permit_subjects(bindings, seen_subjects, subjects, source_bytes)
-            if source_proof is not None and source_proof not in source_proofs:
-                if not self._publication_issuer.owns_source_proof(source_proof):
-                    raise QuarantineError(
-                        "deterministic source proof is outside the publication issuer"
-                    )
-                source_proofs.append(source_proof)
+            self._retain_source_proof(source_proof, source_proofs)
         target = self._permit_target(capsule)
         payload = {
             "policy_version": self._trust_root.policy_version,

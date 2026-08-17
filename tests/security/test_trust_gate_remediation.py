@@ -270,10 +270,12 @@ def _assert_old_permit_rejected_at_final_gate(
     final_gate_entered = False
     original = registry._validate_m3_publication
 
-    def track_final_gate(*args: object, **kwargs: object) -> object:
+    def track_final_gate(
+        candidate: Capsule, publisher: Principal, proof: object | None
+    ) -> object:
         nonlocal final_gate_entered
         final_gate_entered = True
-        return original(*args, **kwargs)
+        return original(candidate, publisher, proof)
 
     monkeypatch.setattr(registry, "_validate_m3_publication", track_final_gate)
     with pytest.raises(PublicationIntegrityError) as caught:
