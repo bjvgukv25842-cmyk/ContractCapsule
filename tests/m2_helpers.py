@@ -26,7 +26,9 @@ TEST_BYTES = b'{"expected":"pass"}\n'
 TEST_DIGEST = "sha256:" + hashlib.sha256(TEST_BYTES).hexdigest()
 
 
-def sample_capsule_data(*, evidence_modes: tuple[str, ...] = ("CAS",)) -> dict[str, Any]:
+def sample_capsule_data(
+    *, evidence_modes: tuple[str, ...] = ("CAS",)
+) -> dict[str, Any]:
     records: list[dict[str, Any]] = []
     evidence_refs: list[str] = []
     if "CAS" in evidence_modes:
@@ -317,13 +319,9 @@ def write_package(
     files: dict[str, Any] = {
         "manifest.json": raw["control_manifest"],
         "payload/atoms.jsonl": raw["semantic_payload"]["atoms"],
-        "payload/metadata.json": {
-            "extensions": raw["semantic_payload"]["extensions"]
-        },
+        "payload/metadata.json": {"extensions": raw["semantic_payload"]["extensions"]},
         "evidence/source-map.jsonl": raw["evidence_plane"]["records"],
-        "evidence/metadata.json": {
-            "extensions": raw["evidence_plane"]["extensions"]
-        },
+        "evidence/metadata.json": {"extensions": raw["evidence_plane"]["extensions"]},
         "graph/dependencies.json": raw["dependency_graph"],
         "contracts/replacement.yaml": raw["replacement_contract"],
         "policies/compression.yaml": raw["compression_policy"],
@@ -399,7 +397,12 @@ class TrustedM3TestHarness:
             principal=Principal(principal_id),
         )
 
-    def promote_source(self, source_bytes: bytes = CAS_BYTES) -> ValidatedAtom:
+    def promote_source(
+        self,
+        source_bytes: bytes = CAS_BYTES,
+        *,
+        compression_class: str = "P1_STRUCTURED",
+    ) -> ValidatedAtom:
         from contractcapsule.build.atomize import (
             bind_evidence,
             extract_candidate_atoms,
@@ -407,7 +410,9 @@ class TrustedM3TestHarness:
         from contractcapsule.build.ingest import SourceInput, snapshot_source
 
         self._source_index += 1
-        source_path = self.root / "m3-trusted-sources" / f"source-{self._source_index}.txt"
+        source_path = (
+            self.root / "m3-trusted-sources" / f"source-{self._source_index}.txt"
+        )
         source_path.parent.mkdir(parents=True, exist_ok=True)
         source_path.write_bytes(source_bytes)
         snapshot = snapshot_source(
@@ -422,6 +427,12 @@ class TrustedM3TestHarness:
             self.principal,
         )
         candidate = extract_candidate_atoms(snapshot)[0]
+        if compression_class not in {"P0_EXACT", "P1_STRUCTURED"}:
+            raise ValueError("M2 Registry migration helper supports only P0/P1")
+        # The frozen extractor intentionally emits P1. This test-only harness changes
+        # the pre-approval candidate so both mandatory Registry branches exercise the
+        # same real Evidence -> approval -> promotion -> loader flow.
+        object.__setattr__(candidate, "compression_class", compression_class)
         binding = bind_evidence(candidate, snapshot)
         approval = self.authority.issue(candidate, (binding,), "reviewer")
         return self.store.promote(candidate.candidate_id, approval)
@@ -435,10 +446,13 @@ class TrustedM3TestHarness:
         version: str = "2.3.0",
         authority: str = "approved-project-policy",
         detached_signature: Mapping[str, Any] | None = None,
+        compression_class: str = "P1_STRUCTURED",
     ) -> DraftCapsule:
         from contractcapsule.build.publish import BuildRequest, build_capsule
 
-        atom = validated_atom or self.promote_source(source_bytes)
+        atom = validated_atom or self.promote_source(
+            source_bytes, compression_class=compression_class
+        )
         self._package_index += 1
         package_path = (
             self.root / "m3-trusted-packages" / f"package-{self._package_index}"

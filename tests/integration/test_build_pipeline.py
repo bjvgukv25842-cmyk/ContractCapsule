@@ -341,8 +341,9 @@ def test_public_build_validate_publish_pipeline_has_no_draft_bypass(
 ) -> None:
     root, revision, principal = git_source
     authority = ApprovalAuthority({"reviewer": b"test-secret"})
-    store = QuarantineStore(approval_verifier=authority.verifier())
-    snapshot = snapshot_source(
+    store = QuarantineStore(trust_root=authority.trust_root())
+    collector = TrustedDeterministicCollector(store, authority.trust_root())
+    snapshot = collector.snapshot(
         SourceInput(
             path=root / "policy.md",
             mode="GIT_IMMUTABLE",

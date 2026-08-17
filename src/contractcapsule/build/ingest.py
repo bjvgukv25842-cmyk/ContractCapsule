@@ -17,6 +17,8 @@ from yaml.tokens import AliasToken, AnchorToken, TagToken
 
 from contractcapsule.audit import quarantine as quarantine_module
 from contractcapsule.audit.quarantine import (
+    DETERMINISTIC_SOURCE_PROFILE,
+    DeterministicSourceProof,
     QuarantineError,
     QuarantineStore,
     TrustRoot,
@@ -162,7 +164,15 @@ def _git_show(root: Path, revision: str, relative_path: str) -> bytes:
     raw_revision = revision.split(":", 1)[1]
     try:
         return subprocess.check_output(
-            ["git", "-C", str(root), "show", f"{raw_revision}:{relative_path}"],
+            [
+                "git",
+                "--no-replace-objects",
+                "-C",
+                str(root),
+                "cat-file",
+                "blob",
+                f"{raw_revision}:{relative_path}",
+            ],
             stderr=subprocess.STDOUT,
         )
     except (OSError, subprocess.CalledProcessError) as error:
@@ -202,13 +212,57 @@ def _verify_git_commit(root: Path, revision: str) -> None:
     raw_revision = revision.split(":", 1)[1]
     try:
         subprocess.run(
-            ["git", "-C", str(root), "cat-file", "-e", f"{raw_revision}^{{commit}}"],
+            [
+                "git",
+                "--no-replace-objects",
+                "-C",
+                str(root),
+                "cat-file",
+                "-e",
+                f"{raw_revision}^{{commit}}",
+            ],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
     except (OSError, subprocess.CalledProcessError) as error:
         raise QuarantineError("Git revision is not a local immutable commit") from error
+
+
+def _resolve_deterministic_git_source(proof: DeterministicSourceProof) -> bytes:
+    """Reload an exact trusted Git object for the Registry commit-boundary check."""
+
+    if type(proof) is not DeterministicSourceProof:
+        raise QuarantineError("deterministic source proof type is invalid")
+    if (
+        proof.collector_profile != DETERMINISTIC_SOURCE_PROFILE
+        or proof.mode != "GIT_IMMUTABLE"
+        or proof.parser_kind not in {"markdown", "code", "json", "yaml"}
+        or not is_safe_relative_path(proof.path)
+    ):
+        raise QuarantineError("deterministic source proof profile is invalid")
+    root = _strict_absolute(proof._repository_root)
+    if not root.is_dir():
+        raise QuarantineError("verified repository root is unavailable")
+    _canonical_repository(proof.repository)
+    _full_revision(proof.revision)
+    _verify_repository_identity(root, proof.repository)
+    _verify_git_commit(root, proof.revision)
+    content = _git_show(root, proof.revision, proof.path)
+    if _digest(content) != proof.content_digest:
+        raise QuarantineError("immutable Git source content digest mismatch")
+    if _parser_kind(Path(proof.path)) != proof.parser_kind:
+        raise QuarantineError("deterministic source parser identity mismatch")
+    try:
+        decoded = content.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        raise QuarantineError("immutable Git source is not valid UTF-8") from error
+    if proof.parser_kind == "json":
+        _strict_source_json(decoded)
+    elif proof.parser_kind == "yaml":
+        _strict_source_yaml(decoded)
+    quarantine_module.scan_secrets(content)
+    return content
 
 
 @dataclass(frozen=True, slots=True)
@@ -481,9 +535,7 @@ def _snapshot_source(
     # commit, parser, digest, and source-path checks above. Public ingestion has no
     # collector capability, so ``generated=False`` remains a non-authoritative hint.
     if collector_capability is not None:
-        proof = store._issue_deterministic_source_proof(
-            snapshot, collector_capability
-        )
+        proof = store._issue_deterministic_source_proof(snapshot, collector_capability)
         if proof is not None:
             object.__setattr__(snapshot, "_source_proof", proof)
     registered = store.register_snapshot(snapshot)

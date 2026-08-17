@@ -101,7 +101,9 @@ def test_default_resolver_denies_all() -> None:
     assert decision == PolicyDecision.deny()
 
 
-def test_first_publish_and_restart_get_preserve_immutable_fields(tmp_path: Path) -> None:
+def test_first_publish_and_restart_get_preserve_immutable_fields(
+    tmp_path: Path,
+) -> None:
     registry, cas, resolver, harness = setup_registry(tmp_path)
     draft = harness.build_draft()
     capsule = draft.capsule
@@ -127,7 +129,9 @@ def test_first_publish_and_restart_get_preserve_immutable_fields(tmp_path: Path)
     assert loaded.capsule.control_manifest.lifecycle == "PUBLISHED"
 
 
-def test_exact_republish_is_idempotent_without_timestamp_or_row_changes(tmp_path: Path) -> None:
+def test_exact_republish_is_idempotent_without_timestamp_or_row_changes(
+    tmp_path: Path,
+) -> None:
     registry, _, _, harness = setup_registry(tmp_path)
     draft = harness.build_draft()
     first = harness.publish(draft, registry)
@@ -148,14 +152,19 @@ def test_same_id_version_different_digest_is_rejected_and_original_survives(
     changed_draft = harness.build_draft(source_bytes=b"different\n")
     with pytest.raises(VersionConflict):
         harness.publish(changed_draft, registry)
-    assert registry.get(
-        original.control_manifest.capsule_id,
-        original.control_manifest.version,
-        Principal("reader"),
-    ).capsule.control_manifest.content_digest == original.control_manifest.content_digest
+    assert (
+        registry.get(
+            original.control_manifest.capsule_id,
+            original.control_manifest.version,
+            Principal("reader"),
+        ).capsule.control_manifest.content_digest
+        == original.control_manifest.content_digest
+    )
 
 
-def test_same_digest_different_detached_envelope_is_not_idempotent(tmp_path: Path) -> None:
+def test_same_digest_different_detached_envelope_is_not_idempotent(
+    tmp_path: Path,
+) -> None:
     registry, _, _, harness = setup_registry(tmp_path)
     validated = harness.promote_source()
     original_draft = harness.build_draft(validated_atom=validated)
@@ -194,7 +203,9 @@ def test_publish_revalidates_model_copy_that_bypassed_nested_invariants(
     assert registry._table_counts()["publications"] == 0
 
 
-def test_unauthorized_duplicate_publish_does_not_confirm_existence(tmp_path: Path) -> None:
+def test_unauthorized_duplicate_publish_does_not_confirm_existence(
+    tmp_path: Path,
+) -> None:
     registry, _, _, harness = setup_registry(tmp_path)
     validated = harness.promote_source()
     existing_draft = harness.build_draft(validated_atom=validated)
@@ -336,7 +347,72 @@ def test_transaction_failure_rolls_back_publication_references_and_grants(
         "publications": 0,
         "evidence_references": 0,
         "digest_grants": 0,
+        "m3_trust_attestations": 0,
     }
+
+
+def test_attestation_insert_failure_rolls_back_then_retry_and_replay_are_atomic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry, _, _, harness = setup_registry(tmp_path)
+    draft = harness.build_draft()
+    original_insert = registry._insert_m3_attestation
+
+    def fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("injected attestation failure")
+
+    monkeypatch.setattr(registry, "_insert_m3_attestation", fail)
+    with pytest.raises(RuntimeError, match="injected attestation failure"):
+        harness.publish(draft, registry)
+    assert registry._table_counts() == {
+        "publications": 0,
+        "evidence_references": 0,
+        "digest_grants": 0,
+        "m3_trust_attestations": 0,
+    }
+
+    monkeypatch.setattr(registry, "_insert_m3_attestation", original_insert)
+    first = harness.publish(draft, registry)
+    complete = {
+        "publications": 1,
+        "evidence_references": 1,
+        "digest_grants": 1,
+        "m3_trust_attestations": 1,
+    }
+    assert registry._table_counts() == complete
+    second = harness.publish(draft, registry)
+    assert second == first
+    assert registry._table_counts() == complete
+
+    atom = draft.capsule.semantic_payload.atoms[0]
+    trust = atom.extensions["x-trust"]
+    evidence = draft.capsule.evidence_plane.records[0]
+    source_map = evidence.extensions["x-source-map"]
+    with sqlite3.connect(registry.database_path) as connection:
+        row = connection.execute("SELECT * FROM m3_trust_attestations").fetchone()
+    assert row is not None
+    payload = json.loads(row[4])
+    permit_atom = payload["atoms"][0]
+    permit_binding = permit_atom["bindings"][0]
+    subject = payload["source_subjects"][0]
+    assert payload["capsule_digest"] == draft.capsule.control_manifest.content_digest
+    assert permit_atom["candidate_id"] == trust["candidate_id"]
+    assert permit_atom["approval"]["approval_id"] == trust["approval"]["approval_id"]
+    assert (
+        permit_atom["approval"]["candidate_digest"]
+        == trust["approval"]["candidate_digest"]
+    )
+    assert (
+        tuple(permit_atom["approval"]["evidence_digests"])
+        == trust["approval"]["evidence_digests"]
+    )
+    assert permit_binding["binding_id"] == source_map["binding_id"]
+    assert permit_binding["content_digest"] == evidence.content_digest
+    assert subject["binding_id"] == source_map["binding_id"]
+    assert subject["content_digest"] == evidence.content_digest
+    assert payload["policy_version"] == harness.authority.trust_root().policy_version
+    assert payload["trust_root_id"] == harness.authority.trust_root().root_id
+    assert payload["scanner_version"] == "m3-secret-scanner-v1"
 
 
 def test_cas_integrity_failure_inside_publish_leaves_no_registry_rows(
@@ -351,6 +427,7 @@ def test_cas_integrity_failure_inside_publish_leaves_no_registry_rows(
         "publications": 0,
         "evidence_references": 0,
         "digest_grants": 0,
+        "m3_trust_attestations": 0,
     }
 
 
@@ -365,7 +442,9 @@ def test_publish_does_not_mutate_lifecycle_to_published(tmp_path: Path) -> None:
     assert registry._table_counts()["publications"] == 0
 
 
-def test_registry_detects_missing_reference_row_instead_of_repairing_it(tmp_path: Path) -> None:
+def test_registry_detects_missing_reference_row_instead_of_repairing_it(
+    tmp_path: Path,
+) -> None:
     registry, _, _, harness = setup_registry(tmp_path)
     draft = harness.build_draft()
     harness.publish(draft, registry)
@@ -376,7 +455,9 @@ def test_registry_detects_missing_reference_row_instead_of_repairing_it(tmp_path
         harness.publish(draft, registry)
 
 
-def test_registry_get_missing_and_unauthorized_are_both_non_disclosing(tmp_path: Path) -> None:
+def test_registry_get_missing_and_unauthorized_are_both_non_disclosing(
+    tmp_path: Path,
+) -> None:
     registry, _, _, harness = setup_registry(tmp_path)
     draft = harness.build_draft()
     capsule = draft.capsule
@@ -403,7 +484,9 @@ def test_blob_access_policy_cannot_expand_a_resolver_read_grant(tmp_path: Path) 
         registry.get_blob(digest, Principal("narrow-reader"))
 
 
-def test_tampered_grant_cannot_authorize_an_unreferenced_cas_object(tmp_path: Path) -> None:
+def test_tampered_grant_cannot_authorize_an_unreferenced_cas_object(
+    tmp_path: Path,
+) -> None:
     registry, cas, _, harness = setup_registry(tmp_path)
     draft = harness.build_draft()
     harness.publish(draft, registry)
@@ -414,7 +497,9 @@ def test_tampered_grant_cannot_authorize_an_unreferenced_cas_object(tmp_path: Pa
         registry.get_blob(orphan.digest, Principal("reader"))
 
 
-def test_unauthorized_get_does_not_expose_corrupt_existing_record(tmp_path: Path) -> None:
+def test_unauthorized_get_does_not_expose_corrupt_existing_record(
+    tmp_path: Path,
+) -> None:
     registry, _, _, harness = setup_registry(tmp_path)
     draft = harness.build_draft()
     capsule = draft.capsule

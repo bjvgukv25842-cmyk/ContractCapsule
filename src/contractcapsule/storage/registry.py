@@ -335,16 +335,24 @@ class Registry:
 
     @staticmethod
     def _access_policies(capsule: Capsule) -> frozenset[str]:
-        return frozenset(record.access_policy for record in capsule.evidence_plane.records)
+        return frozenset(
+            record.access_policy for record in capsule.evidence_plane.records
+        )
 
     def _authorize_publish(self, capsule: Capsule, principal: Principal) -> None:
         decision = self._decision(capsule, principal, "publish")
-        if not decision.allowed or not self._access_policies(capsule) <= decision.allowed_access_policies:
+        if (
+            not decision.allowed
+            or not self._access_policies(capsule) <= decision.allowed_access_policies
+        ):
             raise RegistryAuthorizationError("publication is not authorized")
 
     def _authorize_read(self, capsule: Capsule, principal: Principal) -> bool:
         decision = self._decision(capsule, principal, "read")
-        return decision.allowed and self._access_policies(capsule) <= decision.allowed_access_policies
+        return (
+            decision.allowed
+            and self._access_policies(capsule) <= decision.allowed_access_policies
+        )
 
     @staticmethod
     def _evidence_records(capsule: Capsule) -> list[dict[str, Any]]:
@@ -356,7 +364,9 @@ class Registry:
         if manifest.lifecycle != "PUBLISHED":
             raise PublicationIntegrityError("publish requires PUBLISHED lifecycle")
         if canonical_digest(capsule) != manifest.content_digest:
-            raise PublicationIntegrityError("candidate content digest does not match core")
+            raise PublicationIntegrityError(
+                "candidate content digest does not match core"
+            )
         for record in capsule.evidence_plane.records:
             if record.mode == "CAS":
                 stored = self._cas._read_verified(record.content_digest)
@@ -377,7 +387,9 @@ class Registry:
 
             thawed = thaw_json(payload)
         except (TypeError, ValueError) as error:
-            raise PublicationIntegrityError("trust permit payload is invalid") from error
+            raise PublicationIntegrityError(
+                "trust permit payload is invalid"
+            ) from error
         if not isinstance(thawed, Mapping):
             raise PublicationIntegrityError("trust permit payload is invalid")
         return thawed
@@ -406,9 +418,12 @@ class Registry:
             raise PublicationIntegrityError("M3 trust proof is unavailable")
         payload = self._permit_payload(permit)
         loader_wire = payload.get("loader_attestation")
+        owns_loader_attestation = getattr(issuer, "owns_loader_attestation", None)
         if (
             not isinstance(loader_wire, Mapping)
             or getattr(issuer, "store_id", None) != loader_wire.get("store_id")
+            or not callable(owns_loader_attestation)
+            or not owns_loader_attestation(getattr(permit, "loader_attestation", None))
         ):
             raise PublicationIntegrityError("M3 trust permit issuer binding is invalid")
         verified = False
@@ -466,7 +481,9 @@ class Registry:
         except Exception:  # noqa: BLE001 - trust failures must fail closed.
             valid = False
         if not valid:
-            raise PublicationIntegrityError("M3 loader attestation signature is invalid")
+            raise PublicationIntegrityError(
+                "M3 loader attestation signature is invalid"
+            )
         if package_path is not None:
             try:
                 from contractcapsule.package import load_capsule
@@ -489,7 +506,9 @@ class Registry:
     ) -> dict[str, dict[str, Any]]:
         evidence_by_id: dict[str, dict[str, Any]] = {}
         for record in evidence_wire:
-            if not isinstance(record, dict) or not isinstance(record.get("evidence_id"), str):
+            if not isinstance(record, dict) or not isinstance(
+                record.get("evidence_id"), str
+            ):
                 raise PublicationIntegrityError("M3 evidence record is malformed")
             evidence_by_id[record["evidence_id"]] = record
         return evidence_by_id
@@ -512,9 +531,13 @@ class Registry:
         approval = trust.get("approval")
         refs = atom.get("evidence_refs")
         if not isinstance(candidate_id, str) or not candidate_id:
-            raise PublicationIntegrityError("validated atom candidate identity is missing")
+            raise PublicationIntegrityError(
+                "validated atom candidate identity is missing"
+            )
         if not isinstance(approval, Mapping) or not isinstance(refs, list) or not refs:
-            raise PublicationIntegrityError("validated atom approval/evidence is missing")
+            raise PublicationIntegrityError(
+                "validated atom approval/evidence is missing"
+            )
         if approval.get("candidate_id", candidate_id) != candidate_id:
             raise PublicationIntegrityError("approval candidate identity mismatch")
         Registry._validate_atom_refs(refs, candidate_id, evidence_by_id)
@@ -529,11 +552,17 @@ class Registry:
         for evidence_id in refs:
             record = evidence_by_id.get(evidence_id)
             if record is None:
-                raise PublicationIntegrityError("validated atom evidence reference is missing")
+                raise PublicationIntegrityError(
+                    "validated atom evidence reference is missing"
+                )
             extensions = record.get("extensions")
-            source_map = extensions.get("x-source-map") if isinstance(extensions, dict) else None
+            source_map = (
+                extensions.get("x-source-map") if isinstance(extensions, dict) else None
+            )
             if not isinstance(source_map, Mapping):
-                raise PublicationIntegrityError("evidence source-map binding is missing")
+                raise PublicationIntegrityError(
+                    "evidence source-map binding is missing"
+                )
             if source_map.get("candidate_id", candidate_id) != candidate_id:
                 raise PublicationIntegrityError("evidence binding candidate mismatch")
 
@@ -573,17 +602,20 @@ class Registry:
                 raise PublicationIntegrityError(
                     f"M3 trust permit {key} does not match publication"
                 )
-        if payload.get("policy_version") != getattr(self._trust_root, "policy_version", None):
+        if payload.get("policy_version") != getattr(
+            self._trust_root, "policy_version", None
+        ):
             raise PublicationIntegrityError("M3 trust permit policy version mismatch")
         if payload.get("trust_root_id") != getattr(self._trust_root, "root_id", None):
             raise PublicationIntegrityError("M3 trust permit trust root mismatch")
         if payload.get("scanner_version") != _M3_SECRET_SCANNER_VERSION:
             raise PublicationIntegrityError("M3 secret scanner profile mismatch")
-        if (
-            payload.get("authority") != manifest.authority
-            or payload.get("scope") != _scope_dict(capsule)
-        ):
-            raise PublicationIntegrityError("M3 trust permit publication target mismatch")
+        if payload.get("authority") != manifest.authority or payload.get(
+            "scope"
+        ) != _scope_dict(capsule):
+            raise PublicationIntegrityError(
+                "M3 trust permit publication target mismatch"
+            )
         self._validate_loader_attestation(payload, capsule, permit)
 
     @staticmethod
@@ -591,14 +623,22 @@ class Registry:
         permit_atoms: Any, expected_count: int
     ) -> dict[str, Mapping[str, Any]]:
         if not isinstance(permit_atoms, list) or len(permit_atoms) != expected_count:
-            raise PublicationIntegrityError("M3 trust permit atom set does not match capsule")
+            raise PublicationIntegrityError(
+                "M3 trust permit atom set does not match capsule"
+            )
         result: dict[str, Mapping[str, Any]] = {}
         for item in permit_atoms:
-            if not isinstance(item, Mapping) or not isinstance(item.get("candidate_id"), str):
-                raise PublicationIntegrityError("M3 trust permit atom entry is malformed")
+            if not isinstance(item, Mapping) or not isinstance(
+                item.get("candidate_id"), str
+            ):
+                raise PublicationIntegrityError(
+                    "M3 trust permit atom entry is malformed"
+                )
             candidate_id = item["candidate_id"]
             if candidate_id in result:
-                raise PublicationIntegrityError("M3 trust permit has duplicate candidates")
+                raise PublicationIntegrityError(
+                    "M3 trust permit has duplicate candidates"
+                )
             result[candidate_id] = item
         return result
 
@@ -644,15 +684,20 @@ class Registry:
             or trust.get("level") != permit_atom.get("validated_trust_level")
             or trust.get("source_level") != permit_atom.get("source_trust_level")
             or trust.get("level") != "T1"
-            or candidate.get("validated_trust_level") != permit_atom.get("validated_trust_level")
+            or candidate.get("validated_trust_level")
+            != permit_atom.get("validated_trust_level")
             or permit_atom.get("validated_status") != "validated"
         ):
-            raise PublicationIntegrityError("M3 trust permit candidate binding mismatch")
+            raise PublicationIntegrityError(
+                "M3 trust permit candidate binding mismatch"
+            )
         projection = Registry._candidate_projection(candidate)
         permit_projection = {key: permit_atom.get(key) for key in projection}
         permit_projection["source_snapshot_id"] = permit_atom.get("snapshot_id")
         if _jcs_text(permit_projection) != _jcs_text(projection):
-            raise PublicationIntegrityError("M3 trust permit candidate binding mismatch")
+            raise PublicationIntegrityError(
+                "M3 trust permit candidate binding mismatch"
+            )
 
     @staticmethod
     def _source_classification(
@@ -669,10 +714,13 @@ class Registry:
                 not isinstance(source_proof, Mapping)
                 or source_proof.get("collector_profile")
                 != "CCS-2.1-deterministic-source-v1"
-                or source_proof.get("snapshot_id") != candidate.get("source_snapshot_id")
+                or source_proof.get("snapshot_id")
+                != candidate.get("source_snapshot_id")
                 or source_proof.get("mode") != "GIT_IMMUTABLE"
             ):
-                raise PublicationIntegrityError("M3 deterministic source proof is missing")
+                raise PublicationIntegrityError(
+                    "M3 deterministic source proof is missing"
+                )
         elif source_level == "T3":
             if source_proof is not None:
                 raise PublicationIntegrityError(
@@ -683,9 +731,85 @@ class Registry:
         return source_proof
 
     @staticmethod
+    def _source_proof_wire(proof: Any) -> dict[str, Any]:
+        return {
+            "snapshot_id": getattr(proof, "snapshot_id", None),
+            "content_digest": getattr(proof, "content_digest", None),
+            "mode": getattr(proof, "mode", None),
+            "parser_kind": getattr(proof, "parser_kind", None),
+            "repository": getattr(proof, "repository", None),
+            "revision": getattr(proof, "revision", None),
+            "path": getattr(proof, "path", None),
+            "collector_profile": getattr(proof, "collector_profile", None),
+        }
+
+    @staticmethod
+    def _permit_git_proofs(permit: Any) -> dict[str, Any]:
+        issuer = getattr(permit, "issuer_capability", None)
+        owns_source_proof = getattr(issuer, "owns_source_proof", None)
+        proofs = getattr(permit, "source_proofs", ())
+        if not isinstance(proofs, tuple) or not callable(owns_source_proof):
+            raise PublicationIntegrityError(
+                "M3 authoritative source resolver is unavailable"
+            )
+        result: dict[str, Any] = {}
+        for proof in proofs:
+            try:
+                owned = bool(owns_source_proof(proof))
+                key = _jcs_text(Registry._source_proof_wire(proof))
+            except Exception as error:
+                raise PublicationIntegrityError(
+                    "M3 authoritative source resolver is unavailable"
+                ) from error
+            if not owned or key in result:
+                raise PublicationIntegrityError(
+                    "M3 authoritative source resolver is unavailable"
+                )
+            result[key] = proof
+        return result
+
+    @staticmethod
+    def _git_proof_wires_by_binding(
+        payload: Mapping[str, Any],
+    ) -> dict[str, Mapping[str, Any]]:
+        atoms = payload.get("atoms")
+        if not isinstance(atoms, list):
+            raise PublicationIntegrityError("M3 trust permit atom set is malformed")
+        result: dict[str, Mapping[str, Any]] = {}
+        for atom in atoms:
+            if not isinstance(atom, Mapping):
+                raise PublicationIntegrityError(
+                    "M3 trust permit atom entry is malformed"
+                )
+            proof = atom.get("source_proof")
+            bindings = atom.get("bindings")
+            if not isinstance(bindings, list):
+                raise PublicationIntegrityError(
+                    "M3 trust permit bindings are malformed"
+                )
+            for binding in bindings:
+                if (
+                    not isinstance(binding, Mapping)
+                    or binding.get("mode") != "GIT_IMMUTABLE"
+                ):
+                    continue
+                binding_id = binding.get("binding_id")
+                if not isinstance(binding_id, str) or not isinstance(proof, Mapping):
+                    raise PublicationIntegrityError(
+                        "M3 authoritative source resolver is unavailable"
+                    )
+                existing = result.get(binding_id)
+                if existing is not None and _jcs_text(existing) != _jcs_text(proof):
+                    raise PublicationIntegrityError(
+                        "M3 authoritative source resolver binding is ambiguous"
+                    )
+                result[binding_id] = proof
+        return result
+
+    @staticmethod
     def _validate_source_subjects(
         payload: Mapping[str, Any], permit: Any
-    ) -> dict[str, Mapping[str, Any]]:
+    ) -> tuple[dict[str, Mapping[str, Any]], dict[str, bytes]]:
         source_subjects = payload.get("source_subjects")
         source_bytes = getattr(permit, "source_bytes", ())
         if (
@@ -694,28 +818,57 @@ class Registry:
             or not isinstance(source_bytes, (tuple, list))
             or len(source_subjects) != len(source_bytes)
         ):
-            raise PublicationIntegrityError("M3 trust permit source subjects are missing")
+            raise PublicationIntegrityError(
+                "M3 trust permit source subjects are missing"
+            )
         subject_by_binding: dict[str, Mapping[str, Any]] = {}
+        authoritative_by_binding: dict[str, bytes] = {}
         try:
             from contractcapsule.audit import quarantine as quarantine_module
+            from contractcapsule.build.ingest import _resolve_deterministic_git_source
 
             scanner = quarantine_module.scan_secrets
+            proof_wires = Registry._git_proof_wires_by_binding(payload)
+            proofs = Registry._permit_git_proofs(permit)
+            resolved: dict[str, bytes] = {}
+            used_proofs: set[str] = set()
             for subject, data in zip(source_subjects, source_bytes, strict=True):
                 if not isinstance(subject, Mapping) or not isinstance(data, bytes):
                     raise TypeError("source subject is malformed")
                 binding_id = subject.get("binding_id")
                 digest = subject.get("content_digest")
+                mode = subject.get("mode")
+                if not isinstance(binding_id, str):
+                    raise TypeError("source subject binding identity is malformed")
+                if mode == "GIT_IMMUTABLE":
+                    wire = proof_wires.get(binding_id)
+                    if wire is None:
+                        raise ValueError("Git source proof is missing")
+                    proof_key = _jcs_text(wire)
+                    proof = proofs.get(proof_key)
+                    if proof is None:
+                        raise ValueError("trusted Git source resolver is missing")
+                    if proof_key not in resolved:
+                        resolved[proof_key] = _resolve_deterministic_git_source(proof)
+                    data = resolved[proof_key]
+                    used_proofs.add(proof_key)
+                elif binding_id in proof_wires:
+                    raise ValueError("Git source proof mode is inconsistent")
                 if (
-                    not isinstance(binding_id, str)
-                    or binding_id in subject_by_binding
+                    binding_id in subject_by_binding
                     or digest != "sha256:" + hashlib.sha256(data).hexdigest()
                 ):
                     raise ValueError("source subject digest does not match bytes")
                 scanner(data)
                 subject_by_binding[binding_id] = subject
+                authoritative_by_binding[binding_id] = data
+            if set(proofs) != used_proofs:
+                raise ValueError("publication permit has unbound source resolvers")
         except Exception as error:
-            raise PublicationIntegrityError("M3 secret scan or source proof failed") from error
-        return subject_by_binding
+            raise PublicationIntegrityError(
+                "M3 authoritative source revalidation failed"
+            ) from error
+        return subject_by_binding, authoritative_by_binding
 
     @staticmethod
     def _validate_candidate_witness(
@@ -730,9 +883,9 @@ class Registry:
         if not isinstance(candidate, Mapping):
             raise PublicationIntegrityError("M3 candidate witness is missing")
         projection = Registry._candidate_projection(candidate)
-        calculated = "sha256:" + hashlib.sha256(
-            canonical_json_bytes(projection)
-        ).hexdigest()
+        calculated = (
+            "sha256:" + hashlib.sha256(canonical_json_bytes(projection)).hexdigest()
+        )
         Registry._candidate_matches_permit(
             atom_wire, trust, permit_atom, candidate, calculated
         )
@@ -778,10 +931,9 @@ class Registry:
         if not isinstance(approval, Mapping):
             raise PublicationIntegrityError("M3 approval witness is malformed")
         permit_approval = permit_atom.get("approval")
-        if (
-            not isinstance(permit_approval, Mapping)
-            or _jcs_text(permit_approval) != _jcs_text(approval)
-        ):
+        if not isinstance(permit_approval, Mapping) or _jcs_text(
+            permit_approval
+        ) != _jcs_text(approval):
             raise PublicationIntegrityError("M3 trust permit approval binding mismatch")
         try:
             from contractcapsule.audit.quarantine import HumanApproval
@@ -852,38 +1004,86 @@ class Registry:
         subject_by_binding: Mapping[str, Mapping[str, Any]],
         source_level: Any,
         source_proof: Mapping[str, Any] | None,
+        authoritative_by_binding: Mapping[str, bytes],
     ) -> list[dict[str, Any]]:
         bindings: list[dict[str, Any]] = []
         for evidence_id in atom_wire["evidence_refs"]:
             record = evidence[evidence_id]
             extensions = record.get("extensions")
-            source_map = extensions.get("x-source-map") if isinstance(extensions, dict) else None
+            source_map = (
+                extensions.get("x-source-map") if isinstance(extensions, dict) else None
+            )
             if not isinstance(source_map, Mapping):
-                raise PublicationIntegrityError("M3 evidence source-map binding is missing")
+                raise PublicationIntegrityError(
+                    "M3 evidence source-map binding is missing"
+                )
             binding = self._binding_wire(record, source_map)
-            binding_digest = "sha256:" + hashlib.sha256(
-                canonical_json_bytes(binding)
-            ).hexdigest()
+            binding_digest = (
+                "sha256:" + hashlib.sha256(canonical_json_bytes(binding)).hexdigest()
+            )
             if (
                 source_map.get("binding_digest") != binding_digest
                 or binding_digest not in evidence_digests
                 or binding["binding_id"] not in subject_by_binding
             ):
-                raise PublicationIntegrityError("M3 evidence or approval binding mismatch")
+                raise PublicationIntegrityError(
+                    "M3 evidence or approval binding mismatch"
+                )
             subject = subject_by_binding[binding["binding_id"]]
             if any(
                 subject.get(key) != binding[key]
                 for key in ("content_digest", "mode", "media_type", "snapshot_id")
             ):
                 raise PublicationIntegrityError("M3 source subject mismatch")
+            source_data: bytes | None
             if binding["mode"] == "CAS":
                 try:
                     from contractcapsule.audit import quarantine as quarantine_module
 
                     stored = self._cas._read_verified(binding["content_digest"])
                     quarantine_module.scan_secrets(stored.data)
+                    source_data = stored.data
                 except Exception as error:
-                    raise PublicationIntegrityError("M3 CAS source scan failed") from error
+                    raise PublicationIntegrityError(
+                        "M3 CAS source scan failed"
+                    ) from error
+            else:
+                source_data = authoritative_by_binding.get(binding["binding_id"])
+            try:
+                if not isinstance(source_data, bytes):
+                    raise TypeError("authoritative source bytes are missing")
+                if (
+                    "sha256:" + hashlib.sha256(source_data).hexdigest()
+                    != binding["content_digest"]
+                ):
+                    raise ValueError("authoritative source digest mismatch")
+                text = source_data.decode("utf-8", errors="strict")
+                lines = text.splitlines(keepends=True)
+                start_line = binding["start_line"]
+                end_line = binding["end_line"]
+                if (
+                    not isinstance(start_line, int)
+                    or not isinstance(end_line, int)
+                    or start_line < 1
+                    or end_line < start_line
+                    or end_line > len(lines)
+                ):
+                    raise ValueError("authoritative source span is invalid")
+                span = "".join(lines[start_line - 1 : end_line]).encode("utf-8")
+                if (
+                    "sha256:" + hashlib.sha256(span).hexdigest()
+                    != binding["span_digest"]
+                ):
+                    raise ValueError("authoritative source span digest mismatch")
+                statement = span.decode("utf-8", errors="strict").strip()
+                if statement.startswith("#"):
+                    statement = statement.lstrip("#").strip().rstrip("#").strip()
+                if statement != atom_wire.get("statement", "").strip():
+                    raise ValueError("authoritative source statement mismatch")
+            except Exception as error:
+                raise PublicationIntegrityError(
+                    "M3 authoritative source binding mismatch"
+                ) from error
             bindings.append(binding)
         if source_level == "T2" and (
             not isinstance(source_proof, Mapping)
@@ -897,7 +1097,9 @@ class Registry:
                 for binding in bindings
             )
         ):
-            raise PublicationIntegrityError("M3 deterministic source proof does not bind evidence")
+            raise PublicationIntegrityError(
+                "M3 deterministic source proof does not bind evidence"
+            )
         return bindings
 
     def _validate_m3_atom(
@@ -906,6 +1108,7 @@ class Registry:
         permit_by_id: Mapping[str, Mapping[str, Any]],
         evidence: Mapping[str, Mapping[str, Any]],
         subject_by_binding: Mapping[str, Mapping[str, Any]],
+        authoritative_by_binding: Mapping[str, bytes],
     ) -> None:
         atom_wire = item["atom"]
         trust = item["trust"]
@@ -918,11 +1121,13 @@ class Registry:
         candidate_id = trust["candidate_id"]
         permit_atom = permit_by_id.get(candidate_id)
         if permit_atom is None:
-            raise PublicationIntegrityError("M3 trust permit candidate is not in capsule")
+            raise PublicationIntegrityError(
+                "M3 trust permit candidate is not in capsule"
+            )
         if not isinstance(atom_wire, Mapping) or not isinstance(trust, Mapping):
             raise PublicationIntegrityError("M3 trust metadata is malformed")
-        _candidate_id, candidate, calculated, source_proof = self._validate_candidate_witness(
-            atom_wire, trust, permit_atom
+        _candidate_id, candidate, calculated, source_proof = (
+            self._validate_candidate_witness(atom_wire, trust, permit_atom)
         )
         _approval, evidence_digests = self._validate_approval(
             candidate_id, calculated, trust, permit_atom
@@ -934,6 +1139,7 @@ class Registry:
             subject_by_binding,
             candidate.get("source_trust_level"),
             source_proof,
+            authoritative_by_binding,
         )
         permit_bindings = permit_atom.get("bindings")
         expected_digests = [
@@ -966,7 +1172,9 @@ class Registry:
                 canonical_json_bytes(capsule_wire_dict(capsule))
             )
         except Exception as error:
-            raise PublicationIntegrityError("M3 final publication secret scan failed") from error
+            raise PublicationIntegrityError(
+                "M3 final publication secret scan failed"
+            ) from error
         payload = self._verify_permit_signature(permit)
         try:
             quarantine_module.scan_secrets(canonical_json_bytes(payload))
@@ -979,11 +1187,19 @@ class Registry:
                 "M3 trust permit secret scan failed"
             ) from error
         self._validate_m3_header(capsule, principal, payload, permit)
-        subject_by_binding = self._validate_source_subjects(payload, permit)
+        subject_by_binding, authoritative_by_binding = self._validate_source_subjects(
+            payload, permit
+        )
         atoms, evidence = self._wire_trust_metadata(capsule)
         permit_by_id = self._permit_atom_map(payload.get("atoms"), len(atoms))
         for item in atoms:
-            self._validate_m3_atom(item, permit_by_id, evidence, subject_by_binding)
+            self._validate_m3_atom(
+                item,
+                permit_by_id,
+                evidence,
+                subject_by_binding,
+                authoritative_by_binding,
+            )
         return payload
 
     @staticmethod
@@ -1106,7 +1322,9 @@ class Registry:
         try:
             payload = json.loads(attestation["permit_payload_jcs"])
         except (TypeError, ValueError, json.JSONDecodeError) as error:
-            raise PublicationIntegrityError("M3 trust attestation payload is corrupt") from error
+            raise PublicationIntegrityError(
+                "M3 trust attestation payload is corrupt"
+            ) from error
         if not isinstance(payload, Mapping):
             raise PublicationIntegrityError("M3 trust attestation payload is malformed")
         if (
@@ -1114,14 +1332,19 @@ class Registry:
             or payload.get("capsule_id") != row["capsule_id"]
             or payload.get("version") != row["version"]
         ):
-            raise PublicationIntegrityError("M3 trust attestation capsule binding mismatch")
-        if attestation["policy_version"] != getattr(self._trust_root, "policy_version", None):
-            raise PublicationIntegrityError("M3 trust attestation policy mismatch")
-        if (
-            attestation["trust_root_id"] != getattr(self._trust_root, "root_id", None)
-            or attestation["principal_id"] != payload.get("principal_id")
+            raise PublicationIntegrityError(
+                "M3 trust attestation capsule binding mismatch"
+            )
+        if attestation["policy_version"] != getattr(
+            self._trust_root, "policy_version", None
         ):
-            raise PublicationIntegrityError("M3 trust attestation denormalized binding mismatch")
+            raise PublicationIntegrityError("M3 trust attestation policy mismatch")
+        if attestation["trust_root_id"] != getattr(
+            self._trust_root, "root_id", None
+        ) or attestation["principal_id"] != payload.get("principal_id"):
+            raise PublicationIntegrityError(
+                "M3 trust attestation denormalized binding mismatch"
+            )
         verify_payload = getattr(self._trust_root, "verify_payload", None)
         if not callable(verify_payload):
             raise PublicationIntegrityError("M3 trust root cannot verify attestations")
@@ -1140,7 +1363,9 @@ class Registry:
         try:
             subjects = json.loads(attestation["source_subjects_jcs"])
         except (TypeError, ValueError, json.JSONDecodeError) as error:
-            raise PublicationIntegrityError("M3 source subject record is corrupt") from error
+            raise PublicationIntegrityError(
+                "M3 source subject record is corrupt"
+            ) from error
         if subjects != payload.get("source_subjects"):
             raise PublicationIntegrityError("M3 source subject record disagrees")
 
@@ -1200,7 +1425,11 @@ class Registry:
             )
             if record["mode"] == "CAS":
                 grants.append(
-                    (record["evidence_id"], record["content_digest"], record["access_policy"])
+                    (
+                        record["evidence_id"],
+                        record["content_digest"],
+                        record["access_policy"],
+                    )
                 )
         return evidence, grants
 
@@ -1258,7 +1487,9 @@ class Registry:
             wire["runtime_sidecar"] = {}
             capsule = Capsule.model_validate_json(json.dumps(wire))
         except Exception as error:
-            raise PublicationIntegrityError("stored Capsule cannot be reconstructed") from error
+            raise PublicationIntegrityError(
+                "stored Capsule cannot be reconstructed"
+            ) from error
         if (
             canonical_digest(capsule) != row["content_digest"]
             or capsule.control_manifest.content_digest != row["content_digest"]
@@ -1266,7 +1497,9 @@ class Registry:
             or capsule.control_manifest.authority != row["authority"]
             or _jcs_text(_scope_dict(capsule)) != row["scope_jcs"]
         ):
-            raise PublicationIntegrityError("stored Capsule denormalized fields disagree")
+            raise PublicationIntegrityError(
+                "stored Capsule denormalized fields disagree"
+            )
         return PublishedCapsule(capsule, "PUBLISHED", row["published_at"])
 
     def publish(
@@ -1298,9 +1531,15 @@ class Registry:
             # unmarked legacy row. This branch never creates a new row and still
             # verifies every immutable field and evidence/grant reference. Any
             # fresh P0/P1 publication continues through the mandatory M3 gate.
-            if row is not None and publication_permit is None and not _is_m3_capsule(capsule):
+            if (
+                row is not None
+                and publication_permit is None
+                and not _is_m3_capsule(capsule)
+            ):
                 if row["content_digest"] != manifest.content_digest:
-                    raise VersionConflict("capsule ID and version already have another digest")
+                    raise VersionConflict(
+                        "capsule ID and version already have another digest"
+                    )
                 self._verify_existing(connection, row, capsule)
                 return self._row_to_published(row)
             m3_payload = self._validate_m3_publication(
@@ -1308,7 +1547,9 @@ class Registry:
             )
             if row is not None:
                 if row["content_digest"] != manifest.content_digest:
-                    raise VersionConflict("capsule ID and version already have another digest")
+                    raise VersionConflict(
+                        "capsule ID and version already have another digest"
+                    )
                 self._verify_existing(connection, row, capsule)
                 if m3_payload is not None:
                     self._verify_m3_replay(
@@ -1338,7 +1579,9 @@ class Registry:
                 ),
             )
             if cursor.lastrowid is None:  # pragma: no cover - SQLite contract guard
-                raise PublicationIntegrityError("publication insert returned no identifier")
+                raise PublicationIntegrityError(
+                    "publication insert returned no identifier"
+                )
             publication_id = cursor.lastrowid
             self._insert_evidence(connection, publication_id, capsule)
             self._insert_grants(connection, publication_id, capsule)
@@ -1354,7 +1597,9 @@ class Registry:
                 "SELECT * FROM publications WHERE publication_id = ?", (publication_id,)
             ).fetchone()
             if row is None:  # pragma: no cover - SQLite contract guard
-                raise PublicationIntegrityError("publication row disappeared in transaction")
+                raise PublicationIntegrityError(
+                    "publication row disappeared in transaction"
+                )
             self._verify_existing(connection, row, capsule)
             return self._row_to_published(row)
 
@@ -1425,8 +1670,7 @@ class Registry:
                     continue
                 if (
                     decision.allowed
-                    and row["grant_access_policy"]
-                    in decision.allowed_access_policies
+                    and row["grant_access_policy"] in decision.allowed_access_policies
                 ):
                     record = next(
                         (
@@ -1456,11 +1700,14 @@ class Registry:
     def _table_counts(self) -> dict[str, int]:
         with self._connect() as connection:
             return {
-                table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                table: int(
+                    connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                )
                 for table in (
                     "publications",
                     "evidence_references",
                     "digest_grants",
+                    "m3_trust_attestations",
                 )
             }
 
@@ -1476,9 +1723,7 @@ def publish(
 
     if type(registry) is not Registry:
         raise TypeError("registry must be the sealed Registry implementation")
-    return registry.publish(
-        capsule, principal, publication_permit=publication_permit
-    )
+    return registry.publish(capsule, principal, publication_permit=publication_permit)
 
 
 def get(

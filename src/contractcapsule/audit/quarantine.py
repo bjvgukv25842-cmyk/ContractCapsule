@@ -15,6 +15,7 @@ import secrets
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from pathlib import Path
 from threading import RLock
 from types import MappingProxyType
 from typing import Any, Protocol
@@ -125,6 +126,7 @@ class DeterministicSourceProof:
     repository: str
     revision: str
     path: str
+    _repository_root: Path = field(repr=False, compare=False)
     collector_profile: str = DETERMINISTIC_SOURCE_PROFILE
     _token: object | None = field(default=None, repr=False, compare=False)
 
@@ -314,9 +316,7 @@ class TrustRoot:
         issuer: str = "trusted-human-review",
         policy_version: str = TRUST_POLICY_VERSION,
     ) -> None:
-        normalized = {
-            str(key): bytes(value) for key, value in approver_secrets.items()
-        }
+        normalized = {str(key): bytes(value) for key, value in approver_secrets.items()}
         if not normalized or any(not value for value in normalized.values()):
             raise QuarantineError("trust root requires non-empty approver secrets")
         if not issuer or not policy_version:
@@ -349,7 +349,10 @@ class TrustRoot:
                 for approver_id, secret in sorted(self._secrets.items())
             ],
         }
-        return "trust-root-" + hashlib.sha256(canonical_json_bytes(identity)).hexdigest()[:32]
+        return (
+            "trust-root-"
+            + hashlib.sha256(canonical_json_bytes(identity)).hexdigest()[:32]
+        )
 
     def verifier(self) -> ApprovalVerifier:
         return _HmacApprovalVerifier(self._secrets, self.issuer, self)
@@ -388,17 +391,41 @@ class TrustRoot:
 class _PublicationIssuer:
     """Process-local capability attached only to store-issued permits."""
 
-    __slots__ = ("_sealed", "_token", "store_id")
+    _deterministic_source_token: object
+    _loader_token: object
 
-    def __init__(self, store_id: str) -> None:
+    __slots__ = (
+        "_deterministic_source_token",
+        "_loader_token",
+        "_sealed",
+        "_token",
+        "store_id",
+    )
+
+    def __init__(
+        self, store_id: str, deterministic_source_token: object, loader_token: object
+    ) -> None:
         object.__setattr__(self, "store_id", store_id)
         object.__setattr__(self, "_token", object())
+        object.__setattr__(
+            self, "_deterministic_source_token", deterministic_source_token
+        )
+        object.__setattr__(self, "_loader_token", loader_token)
         object.__setattr__(self, "_sealed", True)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if getattr(self, "_sealed", False):
             raise AttributeError("publication issuer is immutable")
         object.__setattr__(self, name, value)
+
+    def owns_source_proof(self, proof: object) -> bool:
+        return (
+            type(proof) is DeterministicSourceProof
+            and proof._token is self._deterministic_source_token
+        )
+
+    def owns_loader_attestation(self, attestation: object) -> bool:
+        return getattr(attestation, "_capability", None) is self._loader_token
 
 
 @dataclass(frozen=True, slots=True)
@@ -408,6 +435,9 @@ class PublicationPermit:
     payload: Mapping[str, Any]
     signature: str
     source_bytes: tuple[bytes, ...] = field(default=(), repr=False, compare=False)
+    source_proofs: tuple[DeterministicSourceProof, ...] = field(
+        default=(), repr=False, compare=False
+    )
     loader_attestation: Any | None = field(default=None, repr=False, compare=False)
     issuer_capability: object | None = field(default=None, repr=False, compare=False)
 
@@ -415,13 +445,19 @@ class PublicationPermit:
         try:
             frozen = freeze_json(self.payload)
         except (ModelInvariantError, TypeError, ValueError) as error:
-            raise QuarantineError("publication proof payload is not JSON-safe") from error
+            raise QuarantineError(
+                "publication proof payload is not JSON-safe"
+            ) from error
         if not isinstance(frozen, Mapping):
             raise QuarantineError("publication proof payload must be an object")
         if not isinstance(self.signature, str) or not self.signature:
             raise QuarantineError("publication proof signature is required")
         if any(not isinstance(item, bytes) for item in self.source_bytes):
             raise QuarantineError("publication proof source subjects must be bytes")
+        if any(
+            type(item) is not DeterministicSourceProof for item in self.source_proofs
+        ):
+            raise QuarantineError("publication proof source resolvers are invalid")
         object.__setattr__(self, "payload", frozen)
 
     def verify(self, trust_root: TrustRoot) -> bool:
@@ -621,7 +657,10 @@ class QuarantineStore:
         *,
         trust_root: TrustRoot | None = None,
     ) -> None:
-        if approval_verifier is not None and type(approval_verifier) is not _HmacApprovalVerifier:
+        if (
+            approval_verifier is not None
+            and type(approval_verifier) is not _HmacApprovalVerifier
+        ):
             raise TypeError("quarantine requires the project trust-root verifier")
         if trust_root is not None and type(trust_root) is not TrustRoot:
             raise TypeError("trust_root must be a TrustRoot")
@@ -630,7 +669,11 @@ class QuarantineStore:
             if type(approval_verifier) is _HmacApprovalVerifier
             else None
         )
-        if trust_root is not None and verifier_root is not None and trust_root is not verifier_root:
+        if (
+            trust_root is not None
+            and verifier_root is not None
+            and trust_root is not verifier_root
+        ):
             raise QuarantineError("approval verifier and trust root disagree")
         self._trust_root = trust_root or verifier_root
         self._approval_verifier = (
@@ -647,7 +690,11 @@ class QuarantineStore:
         self._deterministic_source_token = object()
         self._loader_token = object()
         self._loader_store_id = "quarantine-" + secrets.token_hex(16)
-        self._publication_issuer = _PublicationIssuer(self._loader_store_id)
+        self._publication_issuer = _PublicationIssuer(
+            self._loader_store_id,
+            self._deterministic_source_token,
+            self._loader_token,
+        )
         self._permit_token = object()
         self._lock = RLock()
         self._composition_sealed = True
@@ -735,7 +782,9 @@ class QuarantineStore:
     def register_candidate(self, candidate: CandidateAtom) -> None:
         with self._lock:
             if type(candidate) is not CandidateAtom:
-                raise QuarantineError("candidate must be the deterministic extractor type")
+                raise QuarantineError(
+                    "candidate must be the deterministic extractor type"
+                )
             if candidate._quarantine_token is not self._candidate_token:
                 raise QuarantineError(
                     "candidate was not created by the deterministic extractor"
@@ -838,6 +887,7 @@ class QuarantineStore:
             repository=snapshot.repository,
             revision=snapshot.revision,
             path=snapshot.relative_path,
+            _repository_root=snapshot.repository_root,
             _token=self._deterministic_source_token,
         )
 
@@ -854,6 +904,7 @@ class QuarantineStore:
             and proof.repository == snapshot.repository
             and proof.revision == snapshot.revision
             and proof.path == snapshot.relative_path
+            and proof._repository_root == snapshot.repository_root
             and not snapshot.generated
         )
 
@@ -1168,7 +1219,11 @@ class QuarantineStore:
 
     def _permit_atom_entry(
         self, atom: ValidatedAtom
-    ) -> tuple[dict[str, Any], tuple[EvidenceBinding, ...]]:
+    ) -> tuple[
+        dict[str, Any],
+        tuple[EvidenceBinding, ...],
+        DeterministicSourceProof | None,
+    ]:
         if type(atom) is not ValidatedAtom:
             raise QuarantineError("publication permit accepts validated atoms only")
         self.verify_validated(atom)
@@ -1192,7 +1247,12 @@ class QuarantineStore:
                 "bindings": [self._binding_wire(item) for item in bindings],
             }
         )
-        return entry, bindings
+        proof = getattr(snapshot, "_source_proof", None)
+        return (
+            entry,
+            bindings,
+            proof if type(proof) is DeterministicSourceProof else None,
+        )
 
     @staticmethod
     def _permit_subjects(
@@ -1245,7 +1305,9 @@ class QuarantineStore:
             attestation._capability is not self._loader_token
             or attestation.store_id != self._loader_store_id
         ):
-            raise QuarantineError("loader attestation was not issued by this quarantine")
+            raise QuarantineError(
+                "loader attestation was not issued by this quarantine"
+            )
 
     def issue_publication_permit(
         self,
@@ -1283,16 +1345,25 @@ class QuarantineStore:
         atoms = tuple(validated_atoms)
         if not atoms:
             raise QuarantineError("publication permit requires validated atoms")
-        if loader_attestation is None:  # Defensive guard; helper validation is fail-closed.
+        if (
+            loader_attestation is None
+        ):  # Defensive guard; helper validation is fail-closed.
             raise QuarantineError("loader attestation is required")
         entries: list[dict[str, Any]] = []
         source_bytes: list[bytes] = []
+        source_proofs: list[DeterministicSourceProof] = []
         subjects: list[dict[str, Any]] = []
         seen_subjects: set[tuple[str, str]] = set()
         for atom in atoms:
-            entry, bindings = self._permit_atom_entry(atom)
+            entry, bindings, source_proof = self._permit_atom_entry(atom)
             entries.append(entry)
             self._permit_subjects(bindings, seen_subjects, subjects, source_bytes)
+            if source_proof is not None and source_proof not in source_proofs:
+                if not self._publication_issuer.owns_source_proof(source_proof):
+                    raise QuarantineError(
+                        "deterministic source proof is outside the publication issuer"
+                    )
+                source_proofs.append(source_proof)
         target = self._permit_target(capsule)
         payload = {
             "policy_version": self._trust_root.policy_version,
@@ -1313,6 +1384,7 @@ class QuarantineStore:
                 payload, self._trust_root._permit_capability()
             ),
             source_bytes=tuple(source_bytes),
+            source_proofs=tuple(source_proofs),
             loader_attestation=loader_attestation,
             issuer_capability=self._publication_issuer,
         )
