@@ -717,3 +717,28 @@
 - Claim boundary: these are engineering/security tests, not TER/PIP/BSR or
   C2--C5 empirical results. M3 remains pending a new independent read-only
   audit. M4 was not started and remains unauthorized.
+
+## M3-007 - Post-audit remediation final verification
+
+- Date: 2026-08-17
+- Status: **POST-AUDIT REMEDIATION COMPLETE; EXIT CANDIDATE PENDING NEW
+  INDEPENDENT READ-ONLY AUDIT**
+- Verified technical HEAD: `79f7f078d45d6b3b70f56557fdc20bb2f5975f66`.
+- Local chain after the audit candidate: `6a06866e -> b793ef1 -> 7a6306e ->
+  79f7f07`; all commits descend from the required exact start.
+- Final behavior: 13 focused final-gate nodes, 23 Registry tests, 6 unchanged
+  Hypothesis/property tests, 219 M2-path tests, 71 M3 integration/security
+  tests, 30 M1 formal cases, 4 M0 lock tests, and 1 governance test passed.
+- Full result: 325 passed, with no failure, error, skip, xfail, or deselection.
+  The five disjoint path partitions sum to `219 + 71 + 30 + 4 + 1 = 325`.
+- Node provenance: all 317 node IDs collected from the read-only `6a06866e`
+  archive remain; 0 were removed or renamed; 8 exact new node IDs were added.
+- Static/governance: Ruff, mypy over 34 files, extended complexity, 38-package
+  lock, JSONL required fields, frozen enums, prompt-digest declarations,
+  whitespace, protected-file diff, and both frozen hashes passed.
+- Preserved failure: the first final static pass exposed four mypy errors and
+  four complexity findings. A behavior-preserving helper extraction fixed
+  them in `79f7f07`; the focused and full suites were rerun afterward.
+- Decision boundary: this verifies engineering remediation only. It does not
+  reverse either audit decision, record author approval, add C2--C5 empirical
+  evidence, or authorize M4. A separate independent read-only audit is next.
