@@ -683,3 +683,37 @@
   supplies no C2--C5 empirical result, TER/PIP/BSR observation, baseline
   advantage, or cross-Agent generality. M3 human approval is still pending;
   M4 has not started and remains unauthorized.
+
+## M3-006 - Second exit audit failure and five-finding post-audit remediation
+
+- Date: 2026-08-17
+- Status: **SECOND AUDIT FAIL ACCEPTED; POST-AUDIT TECHNICAL REMEDIATION
+  COMPLETE; INDEPENDENT READ-ONLY REAUDIT REQUIRED; HUMAN EXIT PENDING**
+- Exact start: `6a06866e8594a59a07205fa858cc2ff2ef8e3acf`; isolated branch
+  `codex/m3-post-audit-hotfix-1`.
+- Technical commit: `b793ef1454a2d1d9f63fe4113c50082396aeeb57`.
+- Authoritative-source decision: CCS-2.1 identifies immutable Git evidence by
+  repository plus exact commit, path, and digests. Final Registry validation
+  therefore resolves that exact trusted Git object inside the write
+  transaction; it does not trust retained permit bytes, a caller resolver, a
+  working-tree file, or a moving branch HEAD.
+- Binding decision: candidate, Evidence, and version tests must recompute valid
+  canonical identity and preserve Principal policy so the stable failure comes
+  from final M3 validation. Existing production binding logic needed no
+  unrelated change; temporary mutations prove each corrected test is sensitive.
+- P0 decision: the test-only migration helper may select P0 before approval so
+  the real Evidence/approval/promotion/loader/Registry flow covers it. No
+  production P0/P1 downgrade, public helper, or property reduction is allowed.
+- Attestation decision: insertion already shares the publication transaction.
+  Complete counts and insertion-stage failure/retry/replay/tamper tests supply
+  the missing evidence; the transaction layer is not rewritten.
+- Governance decision: candidate-added ledger rows use only the frozen
+  `research_role` and `human_validation` enums. Exact-digest exceptions retain
+  pre-enforcement research history but cannot admit new invalid rows.
+- Count provenance: Git-object reconstruction produced `280` nodes at
+  `fbe4ee1` and `317` at `6a06866`, with exactly 37 added remediation-security
+  nodes. A historical 316 count is not independently reproducible and remains
+  an unverified intermediate observation rather than fabricated evidence.
+- Claim boundary: these are engineering/security tests, not TER/PIP/BSR or
+  C2--C5 empirical results. M3 remains pending a new independent read-only
+  audit. M4 was not started and remains unauthorized.

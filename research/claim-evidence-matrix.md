@@ -7,8 +7,10 @@ semantics. M3 now supplies bounded engineering evidence for source-grounded
 ingestion, source-map binding, quarantine, and an authoritative
 approval-gated P0/P1 publication boundary. The original M3 exit candidate was
 rejected by a public-path audit; its root-cause remediation and the narrowly
-authorized 17-test setup migration are complete, while the M3 human exit gate
-remains pending.
+authorized 17-test setup migration were followed by a second failed exit audit.
+The five author-confirmed post-audit findings now have a technical remediation
+candidate, while the M3 human exit gate remains pending a new independent
+read-only audit.
 The authorized local Schema-parity remediation is technically verified after a
 conditional implementation audit, and the author formally approved the M2 exit
 gate at `eec2c1fd173748f181dc8b672b3be320035426a8` on 2026-08-03. A planned
