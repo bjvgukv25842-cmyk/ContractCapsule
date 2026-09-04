@@ -1136,6 +1136,35 @@ def test_m3_attestation_denormalized_principal_tamper_is_rejected(
         )
 
 
+def test_m3_attestation_rejects_persisted_detached_signature_tamper(
+    tmp_path: Path,
+) -> None:
+    authority, _store, principal, _snapshot, _candidate, draft = _m3_fixture(tmp_path)
+    registry = _registry(tmp_path, authority)
+    published = publish_draft(draft, principal, registry)
+    tampered_signature = {
+        "algorithm": "m3-test-only",
+        "key_id": "m3-test-key",
+        "value": "tampered-after-publication",
+        "envelope": {"x-purpose": "trust-gate-remediation"},
+    }
+    with sqlite3.connect(registry.database_path) as connection:
+        connection.execute(
+            "UPDATE publications SET detached_signature_jcs = ?",
+            (canonical_json_bytes(tampered_signature).decode("utf-8"),),
+        )
+
+    with pytest.raises(
+        PublicationIntegrityError,
+        match="attestation|publication|projection",
+    ):
+        registry.get(
+            published.capsule.control_manifest.capsule_id,
+            published.capsule.control_manifest.version,
+            principal,
+        )
+
+
 def test_m3_attestation_all_trust_bindings_are_immutable(tmp_path: Path) -> None:
     authority, _store, principal, _snapshot, _candidate, draft = _m3_fixture(tmp_path)
     registry = _registry(tmp_path, authority)

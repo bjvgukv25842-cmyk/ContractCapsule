@@ -1363,7 +1363,7 @@ class Registry:
         return attestation
 
     def _attestation_payload(
-        self, attestation: sqlite3.Row, row: sqlite3.Row
+        self, attestation: sqlite3.Row, row: sqlite3.Row, capsule: Capsule
     ) -> Mapping[str, Any]:
         root_type = _trust_root_class()
         if root_type is None or type(self._trust_root) is not root_type:
@@ -1403,7 +1403,35 @@ class Registry:
             valid = False
         if not valid:
             raise PublicationIntegrityError("M3 trust attestation signature is invalid")
+        self._verify_attested_publication_projection(payload, capsule)
         return payload
+
+    @staticmethod
+    def _verify_attested_publication_projection(
+        payload: Mapping[str, Any], capsule: Capsule
+    ) -> None:
+        loader_attestation = payload.get("loader_attestation")
+        publication_digest = (
+            loader_attestation.get("publication_digest")
+            if isinstance(loader_attestation, Mapping)
+            else None
+        )
+        if not isinstance(publication_digest, str):
+            raise PublicationIntegrityError(
+                "M3 trust attestation publication projection is malformed"
+            )
+        try:
+            from contractcapsule.build.publish import _loader_publication_digest
+
+            persisted_digest = _loader_publication_digest(capsule)
+        except Exception as error:
+            raise PublicationIntegrityError(
+                "M3 trust attestation publication projection cannot be verified"
+            ) from error
+        if publication_digest != persisted_digest:
+            raise PublicationIntegrityError(
+                "M3 trust attestation publication projection mismatch"
+            )
 
     @staticmethod
     def _attestation_subjects(
@@ -1429,7 +1457,7 @@ class Registry:
         attestation = self._attestation_row(connection, row, capsule)
         if attestation is None:
             return
-        payload = self._attestation_payload(attestation, row)
+        payload = self._attestation_payload(attestation, row, capsule)
         self._attestation_subjects(attestation, payload)
 
     def _verify_m3_replay(
