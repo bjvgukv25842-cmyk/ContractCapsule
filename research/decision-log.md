@@ -874,3 +874,24 @@
 - The frozen schedule and all earlier decisions remain unchanged. The branch
   is retained without merge or push. M4 and M5 have not started; the author
   must approve M3's exit before any next module.
+
+## M3-013 - Author exit approval and M4 start authorization
+
+- Date: 2026-09-05
+- Status: **M3 EXIT FORMALLY APPROVED; M4 START AUTHORIZED**
+- Author-approved baseline: `4dbf4849c6e125d1cb5ac8d813e4aeb5dc75694d`.
+- Author instruction explicitly approves M3's exit and authorizes starting M4
+  from that baseline. It accepts the M3 repair/reaudit and evidence records,
+  including technical HEAD `2294af30ade13e1aad5507a85976cd80f425c2fc`.
+- Fresh baseline verification: 339 cumulative tests passed in 8.41s; worktree
+  was clean and both frozen SHA-256 values matched before this governance edit.
+- M0-M3 are now author-approved: 4 of 12 modules, not 4 of 12 empirical claims.
+- Only approval records change here. Source, tests, schemas, dependencies,
+  frozen inputs, protocol and all historical failed audits remain unchanged.
+- M4 will branch from this governance-only descendant of the exact approved
+  baseline. No merge, push or main-worktree change is authorized or performed.
+- The M4 plan's proposed collective-interface extension still needs a separate
+  ADR and author approval before implementation. M3 approval and M4 startup do
+  not implicitly approve that ADR, M4's eventual exit, or M5.
+- Research boundary: engineering acceptance only; no formal experiment,
+  empirical TER/PIP/BSR, baseline advantage, or generality result is established.
