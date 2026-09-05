@@ -429,19 +429,11 @@ class TrustedDeterministicCollector:
         return _snapshot_source(source, principal, self._capability)
 
 
-def _snapshot_source(
+def _read_source_content(
     source: SourceInput,
-    principal: Principal,
-    collector_capability: object | None,
-) -> SourceSnapshot:
-    """Capture and register one immutable source snapshot."""
+) -> tuple[bytes, Path | None, str, Path | None]:
+    """Validate the locator and read bytes, verifying exact Git content if needed."""
 
-    if type(principal) is not Principal:
-        raise TypeError("principal must be a Principal")
-    # Uncomposed ingestion gets an isolated deny-only quarantine. Reusing the
-    # module default would let unrelated requests collide on snapshot identity
-    # and mutable local source handles.
-    store = source.quarantine or QuarantineStore()
     path: Path | None = None
     relative_path = "external/content"
     repository_root: Path | None = None
@@ -476,6 +468,14 @@ def _snapshot_source(
         content = bytes(source.content)
         if source.uri.startswith("doi:") or source.uri.startswith("urn:"):
             relative_path = source.uri
+    return content, path, relative_path, repository_root
+
+
+def _validate_source_content(
+    content: bytes, path: Path | None, relative_path: str
+) -> str:
+    """Scan secrets and validate the selected parser before any persistence."""
+
     quarantine_module.scan_secrets(content)
     parser_kind = _parser_kind(path or Path(relative_path))
     decoded_content = content.decode("utf-8", errors="strict")
@@ -483,6 +483,24 @@ def _snapshot_source(
         _strict_source_json(decoded_content)
     elif parser_kind == "yaml":
         _strict_source_yaml(decoded_content)
+    return parser_kind
+
+
+def _snapshot_source(
+    source: SourceInput,
+    principal: Principal,
+    collector_capability: object | None,
+) -> SourceSnapshot:
+    """Capture and register one immutable source snapshot."""
+
+    if type(principal) is not Principal:
+        raise TypeError("principal must be a Principal")
+    # Uncomposed ingestion gets an isolated deny-only quarantine. Reusing the
+    # module default would let unrelated requests collide on snapshot identity
+    # and mutable local source handles.
+    store = source.quarantine or QuarantineStore()
+    content, path, relative_path, repository_root = _read_source_content(source)
+    parser_kind = _validate_source_content(content, path, relative_path)
     digest = _digest(content)
     if source.cas is not None:
         reference = source.cas.put_blob(
