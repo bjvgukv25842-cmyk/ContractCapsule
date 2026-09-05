@@ -2,14 +2,20 @@
 
 ## Status
 
-**PROPOSED - AUTHOR APPROVAL REQUIRED BEFORE IMPLEMENTATION.**
+**ACCEPTED BY THE AUTHOR ON 2026-09-05.**
 
-Date: 2026-09-05. Module: M4. Proposed runtime profile:
+Approved proposal commit: `7eec393659fcb612a4e21b1a9de295d86160e843`.
+Approved proposal SHA-256:
+`be057b3c85dd72c59f13193097b41b96a57a87f55408fcf71dbaf3cd6c2e46e9`.
+The author explicitly approved ADR-0004. The decision and acceptance-test
+sections below are unchanged from that reviewed proposal.
+
+Date: 2026-09-05. Module: M4. Accepted runtime profile:
 `CCS-2.1-m4-collective-interfaces-v1`.
 
 The author selected collective coverage with a prior ADR during planning,
 then approved M3's exit at `4dbf484` and authorized M4 startup. Those decisions
-authorize preparing this ADR, not marking its final text Accepted. M3 approval
+authorized preparing this ADR; the separate approval above accepts its text. M3 approval
 is recorded in governance commit `9743b34168e160878b9b9e8132512c540954f511`.
 
 Numbers 0001-0003 describe other intended topics in the frozen plan's file map;
@@ -240,10 +246,8 @@ These are planned obligations, not tests already implemented or run:
 
 ## Approval Gate
 
-The requested decision is acceptance or rejection of this ADR's M4 collective
-coverage semantics and the stated M1 compatibility obligations. Acceptance will
-be recorded separately with the ADR digest and exact commit before implementation.
-
-Until then: document preparation and baseline verification only. No M4 runtime
-model, resolver, compiler, new dependency or semantic test is implemented here.
-M4's eventual technical and author exit gates remain separate. M5 is unstarted.
+The author approved the exact proposal identified above. M4 implementation may
+now proceed under its collective coverage semantics and M1 compatibility
+obligations. This acceptance is not a claim that its tests or implementation
+are complete. M4's eventual technical and author exit gates remain separate;
+M5 is unstarted.

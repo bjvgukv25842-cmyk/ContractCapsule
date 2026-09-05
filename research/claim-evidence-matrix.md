@@ -24,8 +24,8 @@ empirical evidence.
 
 M4 is now authorized and initialized on `codex/m4-view-compiler` from M3
 approval record `9743b34`. Its current deliverables are a derived execution plan
-and Proposed ADR-0004 only. Collective-interface semantics, runtime code and
-new dependencies remain behind ADR author approval. This adds no M4 system or
+and ADR-0004; the author has now accepted its exact proposal at `7eec393`.
+Runtime implementation is authorized but not yet verified. This adds no M4 system or
 experimental result; see `research/module-reports/M4.md`.
 
 ## Contribution Claims

@@ -946,3 +946,22 @@
   This is a proposed-text identity, not an approval record or implementation
   result. Full baseline regression after documentation: 339 passed in 8.49s;
   complete no-ignore complexity and whitespace checks passed.
+
+## M4-003 - ADR-0004 accepted; runtime implementation authorized
+
+- Date: 2026-09-05
+- Status: **AUTHOR-ACCEPTED ADR; M4 IMPLEMENTATION AUTHORIZED**
+- Exact reviewed proposal: `7eec393659fcb612a4e21b1a9de295d86160e843`, ADR SHA-256
+  `be057b3c85dd72c59f13193097b41b96a57a87f55408fcf71dbaf3cd6c2e46e9`.
+- The author explicitly approved ADR-0004. Its accepted semantics include
+  collective pre-ranking coverage, complete provider-payload membership,
+  unique root providers, consumer-owned exact dependency locks, and unchanged
+  M1 singleton interface-gate comparison obligations.
+- Only ADR acceptance metadata changes; its decision/acceptance-test text and
+  both frozen baselines are unchanged. This does not approve M4's future exit,
+  authorize M5, or establish any empirical research result.
+- Proceed with M4's implementation/test/review sequence. Shared model/protocol
+  foundations will be committed before their concrete service consumers; the
+  minimal real single-capsule chain is accepted only once those services are
+  connected, not by a placeholder compiler. The seven original deliverables
+  and their final acceptance obligations remain intact.

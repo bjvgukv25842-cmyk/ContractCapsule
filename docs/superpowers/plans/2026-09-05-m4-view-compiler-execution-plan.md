@@ -1,6 +1,6 @@
 # M4 Runtime View Compiler Execution Plan
 
-Status: author requested execution; M3 exit approved; ADR-0004 pending approval.
+Status: execution authorized; M3 exit approved; ADR-0004 accepted on 2026-09-05.
 This is a derived, module-scoped plan, not a replacement for either frozen
 baseline. Use `superpowers:executing-plans` and its applicable implementation,
 TDD and independent-review workflow after all preceding author gates pass.
@@ -141,7 +141,9 @@ M4 author approval. **Do not start M5.**
 
 ## Current Preparation State
 
-M3 approval has been recorded and the isolated M4 baseline has passed all 339
-existing tests. This document and ADR-0004 are preparation artifacts only.
-No M4 runtime code, semantic tests, new schema or new dependency is added by
-this preparation commit. ADR acceptance remains the next author decision.
+M3 approval and the author's acceptance of the exact ADR-0004 proposal are
+recorded. The isolated baseline has 339 passing tests. Runtime implementation
+is now authorized; its remaining technical and author exit gates are unchanged.
+Shared models/protocols are the first implementation increment. The genuine
+single-capsule chain will be validated when concrete services are connected;
+no placeholder compiler counts as fulfilling M4-1.
