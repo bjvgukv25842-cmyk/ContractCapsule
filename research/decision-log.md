@@ -742,3 +742,64 @@
 - Decision boundary: this verifies engineering remediation only. It does not
   reverse either audit decision, record author approval, add C2--C5 empirical
   evidence, or authorize M4. A separate independent read-only audit is next.
+
+## M3-008 - Author-authorized detached-signature read binding
+
+- Date recorded: 2026-09-05
+- Status: **REPAIR IMPLEMENTED AND SECURITY-VERIFIED; NOT EXIT APPROVAL**
+- Author authorization: repair M3 detached-signature attestation reading and
+  conduct a fresh independent audit. The earlier request to continue through
+  M4/M5 does not establish that this failed M3 gate has passed.
+- Exact baseline: `7d673372aafaef440f0337b578bd93cdfa0d3260`.
+- Technical commit: `dc5e87b79436020f32f858ad62041710cf826947`, branch
+  `codex/m3-post-audit-hotfix-2`. Only Registry and its security regression
+  test changed: 59 insertions and 2 deletions.
+- Root cause: reconstructed stored detached signatures were outside CCS
+  canonical identity and were not compared to the existing signature-inclusive
+  publication digest authenticated inside the persisted M3 attestation.
+- Decision: after trust-root signature verification, reuse the existing loader
+  publication projection on reconstructed stored state. Missing, malformed,
+  unavailable or mismatched projection data fails closed. Legacy pre-M3 reads
+  and the process-local loader/HMAC boundary are not changed.
+- Evidence: real public `Registry.get` regression RED before implementation,
+  GREEN after, comparison-removal mutation RED, restored GREEN. The independent
+  reviewer repeated the mutation in a separate archive and checked all public
+  read/use paths and genuine M2-to-M3 database migration.
+- Boundary: the repair neither changes A-zone identity nor verifies an arbitrary
+  production signature algorithm. It binds the existing publication envelope
+  to the configured research trust root. Frozen files and schemas are unchanged.
+
+## M3-009 - Independent audit completed with a new quality-gate blocker
+
+- Date: 2026-09-05
+- Status: **INDEPENDENT TECHNICAL EXIT AUDIT FAIL; NEW REMEDIATION AUTHORIZATION
+  REQUIRED; M3 HUMAN EXIT OPEN**
+- Audited HEAD: `dc5e87b79436020f32f858ad62041710cf826947`.
+- Independent reviewer: fresh internal Codex agent
+  `m3_september_independent_audit`; requested `gpt-6-astra`, high effort.
+  Earlier HTTP 429 attempts did not perform reviews and are not evidence of
+  independent approval. No external agent or search plugin was substituted.
+- No new security/correctness/compatibility defect was found in the repair.
+  Independent tests passed: 219 M2 + 72 M3 + 30 formal + 4 spec locks + 1 ledger
+  = 326; all 17 extra diagnostic probes passed separately. Mypy covered 34
+  files; default lint, 38-package lock and frozen/protected-file checks passed.
+- P2 finding: `.gitignore:11` has unanchored `build/`, so Git-worktree Ruff
+  discovery excludes `src/contractcapsule/build/`. Full archive or
+  `--no-respect-gitignore` checks fail at `ingest.py:432` with C901 17 > 10,
+  PLR0912 17 > 12 and PLR0915 58 > 50. These files are unchanged since `79f7f07`.
+- Evidence correction: historical Exit 0 directory checks remain true as
+  command observations, but are insufficient proof of whole-source complexity
+  compliance. The complete scan's failure is retained and overrides that broad
+  interpretation. No threshold or test was weakened to maintain a pass claim.
+- Next proposed scope, not executed: correct lint discovery, split only
+  `_snapshot_source` without behavioral changes, prove source discovery with a
+  regression check, and rerun cumulative verification plus independent audit.
+- Full report: `research/module-reports/M3-2026-09-05-independent-audit.md`;
+  exact diagnostic source is preserved in its adjacent `.py.txt` evidence file.
+- Schedule: G1 is missed; G2 is due today without its prerequisites; G3 is
+  tomorrow. None is marked passed. No frozen schedule is changed.
+- Author decision: the supplied M3/M4 plan's phase 0 item 5 requires separately
+  authorized repair after audit failure. No new production fix is attempted;
+  no M3 exit approval is inferred. M4 and M5 remain unstarted.
+- Research boundary: engineering evidence only; no formal experiments or
+  empirical TER/PIP/BSR, baseline advantage or cross-agent generality results.

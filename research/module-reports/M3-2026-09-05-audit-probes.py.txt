@@ -1,0 +1,143 @@
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+
+import pytest
+
+from contractcapsule.build.publish import publish_draft
+from contractcapsule.models.canonical import canonical_json_bytes
+from contractcapsule.storage.cas import BlobAuthorizationError
+from contractcapsule.storage.registry import PublicationConflict, PublicationIntegrityError
+from tests.security.test_trust_gate_remediation import _m3_fixture, _registry
+
+
+@pytest.mark.parametrize("field,value", [
+    ("algorithm", "changed"), ("key_id", "changed"), ("value", "changed"),
+    ("envelope", {"x-purpose": "changed"}),
+])
+def test_all_signature_fields_gate_every_use(tmp_path, field, value):
+    authority, store, principal, _, _, draft = _m3_fixture(tmp_path)
+    registry = _registry(tmp_path, authority)
+    permit = store.issue_publication_permit(
+        draft.capsule, draft._validated_atoms, principal,
+        loader_attestation=draft._loader_attestation,
+    )
+    registry.publish(draft.capsule, principal, publication_permit=permit)
+    digest = draft.capsule.evidence_plane.records[0].content_digest
+    assert registry.can_read_blob(digest, principal)
+    with sqlite3.connect(registry.database_path) as connection:
+        signature = json.loads(connection.execute(
+            "SELECT detached_signature_jcs FROM publications"
+        ).fetchone()[0])
+        signature[field] = value
+        connection.execute("UPDATE publications SET detached_signature_jcs = ?",
+                           (canonical_json_bytes(signature).decode(),))
+    manifest = draft.capsule.control_manifest
+    for reader in (registry, _registry(tmp_path, authority)):
+        with pytest.raises(PublicationIntegrityError, match="projection mismatch|cannot be reconstructed"):
+            reader.get(manifest.capsule_id, manifest.version, principal)
+        assert reader.can_read_blob(digest, principal) is False
+        with pytest.raises(BlobAuthorizationError):
+            reader.get_blob(digest, principal)
+        with pytest.raises((PublicationConflict, PublicationIntegrityError)):
+            reader.publish(draft.capsule, principal, publication_permit=permit)
+
+
+@pytest.mark.parametrize("corruption", ["missing", "null", "list", "bad-json", "missing-loader"])
+def test_missing_malformed_attestation_fail_closed(tmp_path, corruption):
+    authority, _, principal, _, _, draft = _m3_fixture(tmp_path)
+    registry = _registry(tmp_path, authority)
+    publish_draft(draft, principal, registry)
+    with sqlite3.connect(registry.database_path) as connection:
+        if corruption == "missing":
+            connection.execute("DELETE FROM m3_trust_attestations")
+        else:
+            value = {"null": "null", "list": "[]", "bad-json": "{"}.get(corruption)
+            if value is None:
+                payload = json.loads(connection.execute(
+                    "SELECT permit_payload_jcs FROM m3_trust_attestations"
+                ).fetchone()[0])
+                payload.pop("loader_attestation")
+                value = canonical_json_bytes(payload).decode()
+            connection.execute("UPDATE m3_trust_attestations SET permit_payload_jcs = ?", (value,))
+    manifest = draft.capsule.control_manifest
+    with pytest.raises(PublicationIntegrityError):
+        registry.get(manifest.capsule_id, manifest.version, principal)
+    assert not registry.can_read_blob(draft.capsule.evidence_plane.records[0].content_digest, principal)
+
+
+@pytest.mark.parametrize("loader", [None, [], {}, {"publication_digest": None}, {"publication_digest": 0}, {"publication_digest": ""}])
+def test_signed_malformed_projection_fail_closed(tmp_path, loader):
+    authority, _, principal, _, _, draft = _m3_fixture(tmp_path)
+    registry = _registry(tmp_path, authority)
+    publish_draft(draft, principal, registry)
+    with sqlite3.connect(registry.database_path) as connection:
+        payload = json.loads(connection.execute(
+            "SELECT permit_payload_jcs FROM m3_trust_attestations"
+        ).fetchone()[0])
+        payload["loader_attestation"] = loader
+        root = authority.trust_root()
+        signature = root._sign_payload(payload)
+        connection.execute(
+            "UPDATE m3_trust_attestations SET permit_payload_jcs = ?, permit_signature = ?",
+            (canonical_json_bytes(payload).decode(), signature),
+        )
+    manifest = draft.capsule.control_manifest
+    with pytest.raises(PublicationIntegrityError, match="publication projection"):
+        registry.get(manifest.capsule_id, manifest.version, principal)
+
+
+def test_fresh_process_verifies_persisted_signature_without_loader_key(tmp_path):
+    authority, _, principal, _, _, draft = _m3_fixture(tmp_path)
+    publish_draft(draft, principal, _registry(tmp_path, authority))
+    code = '''
+from pathlib import Path
+from tests.security.test_trust_gate_remediation import _registry
+from contractcapsule.audit.quarantine import ApprovalAuthority
+from contractcapsule.models import Principal
+import sys
+r = _registry(Path(sys.argv[1]), ApprovalAuthority({"reviewer": b"test-secret"}))
+p = r.get(sys.argv[2], sys.argv[3], Principal("builder"))
+print(p.registry_status)
+'''
+    manifest = draft.capsule.control_manifest
+    result = subprocess.run([sys.executable, "-c", code, str(tmp_path), manifest.capsule_id, manifest.version], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "PUBLISHED"
+
+
+def test_actual_m2_database_migrates_read_and_no_write_replay(tmp_path):
+    from contractcapsule.audit.quarantine import ApprovalAuthority
+    from contractcapsule.models import Principal
+    from contractcapsule.storage.cas import FilesystemCAS
+    from contractcapsule.storage.registry import Registry
+    from tests.m2_helpers import capsule_with_digest
+    from tests.unit.test_registry import StubResolver
+
+    code = '''
+from pathlib import Path
+from tests.unit.test_registry import setup_registry
+from tests.m2_helpers import capsule_with_digest
+from contractcapsule.models import Principal
+import sys
+r, _, _ = setup_registry(Path(sys.argv[1]))
+r.publish(capsule_with_digest(), Principal("publisher"))
+'''
+    env = dict(os.environ, PYTHONPATH="/tmp/cc-m2-legacy-origin.JPjfzG/src:/tmp/cc-m2-legacy-origin.JPjfzG")
+    result = subprocess.run([sys.executable, "-c", code, str(tmp_path)], cwd="/tmp/cc-m2-legacy-origin.JPjfzG", env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    resolver = StubResolver()
+    resolver.grant("publisher", "publish")
+    resolver.grant("reader", "read")
+    registry = Registry(tmp_path / "registry.sqlite3", FilesystemCAS(tmp_path / "cas"), resolver,
+                        trust_root=ApprovalAuthority({"reviewer": b"test-secret"}).trust_root())
+    capsule = capsule_with_digest()
+    manifest = capsule.control_manifest
+    existing = registry.get(manifest.capsule_id, manifest.version, Principal("reader"))
+    counts = registry._table_counts()
+    assert counts["m3_trust_attestations"] == 0
+    assert registry.publish(capsule, Principal("publisher")) == existing
+    assert counts == registry._table_counts()
+    assert registry.get_blob(capsule.evidence_plane.records[0].content_digest, Principal("reader"))
