@@ -965,3 +965,24 @@
   minimal real single-capsule chain is accepted only once those services are
   connected, not by a placeholder compiler. The seven original deliverables
   and their final acceptance obligations remain intact.
+
+## M4-004 - Minimal dependency and offline tokenizer preflight
+
+- Date: 2026-09-05. Status: implementation preflight verified, M4 exit pending.
+- Exact new direct pins: tiktoken 0.14.0 and semantic-version 2.10.0; existing
+  packages remain at their prior locked versions. Resolved lock has 46 packages.
+- Inspected installed official package source and metadata. The native official
+  webpage query returned HTTP 502; no alternative search plugin was invoked.
+- The official OpenAI o200k_base vocabulary is stored as a B-zone implementation
+  resource and matches upstream SHA-256
+  `446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d`.
+  Its regex/special-token profile is copied from the same pinned official
+  constructor; profile SHA-256 is
+  `df47711b119989c276e11a040d7a727cb10eff78216c3b1c38614d8aadf63653`.
+  License notice and provenance accompany the resource. Runtime code must load
+  only local bytes, validate both hashes and never auto-download/repair them.
+- SemVer equality includes build metadata in this library; release precedence
+  comparison therefore uses Version.truncate('prerelease') on both operands,
+  while exact lock equality retains the full published version string.
+- Fresh baseline: 339 passed in 8.53s; offline lock check passes. No M4 runtime
+  behavior is claimed yet; tokenizer failure/offline behavior needs tests.
