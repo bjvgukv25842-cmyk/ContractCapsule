@@ -803,3 +803,74 @@
   no M3 exit approval is inferred. M4 and M5 remain unstarted.
 - Research boundary: engineering evidence only; no formal experiments or
   empirical TER/PIP/BSR, baseline advantage or cross-agent generality results.
+
+## M3-010 - Limited Builder quality remediation authorized
+
+- Date: 2026-09-05
+- Status: **AUTHOR-AUTHORIZED M3 REPAIR ONLY**
+- Author instruction: correct scan scope, split the function without changing
+  behavior, add regressions and repeat independent audit.
+- Baseline: `548af1eabcffccf2ffdfd5c89ab9f1e2dbc9a7d8`, existing isolated
+  `codex/m3-post-audit-hotfix-2` worktree. The worktree was clean and both frozen
+  hashes matched before implementation.
+- Allowed technical surface: `.gitignore`, `build/ingest.py`, and two new unit
+  regression files. No Registry/trust-policy, schema, dependency, protocol,
+  frozen-file, existing-test or next-module change was authorized.
+- Approval of this repair is not approval of the M3 exit gate, a merge, or M4.
+
+## M3-011 - Scan discovery fixed and ingestion behavior preserved
+
+- Date: 2026-09-05
+- Status: **LIMITED TECHNICAL REPAIR COMPLETE**
+- Scan commit: `b6f7608c5ba5f6518465e43100724f89b139eba4`.
+- Refactor commit: `2294af30ade13e1aad5507a85976cd80f425c2fc`.
+- Root-only `/build/` replaces the broad ignore rule. Actual Ruff consumers
+  expose deliberate Builder diagnostics while still ignoring generated root
+  build artifacts, including the nested-parent-ignore case.
+- `_read_source_content` and `_validate_source_content` extract existing
+  statements; original call shapes, validation/error semantics, metadata and
+  identity, scans, CAS effects, proof issuance and registration order remain.
+- TDD: three discovery regressions failed before the ignore fix and passed
+  afterward. Ten characterizations passed before and after the refactor; they
+  are not misrepresented as bug RED. Finalized tests also pass against the
+  original baseline production archive.
+- All 326 original nodes and 26 original test/fixture files are retained
+  unchanged; 13 new nodes give 339 committed tests. Full discovered Python
+  inventory is 36/36, including all four Builder files. Complexity thresholds
+  and all other ignore rules are unchanged; no new suppression was introduced.
+- Test-only Mypy/import-lint iteration failures and successful corrections are
+  retained in the report, not omitted from the development record.
+
+## M3-012 - Independent quality reaudit passed; human exit remains pending
+
+- Date: 2026-09-05
+- Status: **TECHNICAL M3 EXIT REAUDIT PASS; HUMAN EXIT APPROVAL PENDING**
+- Target: `2294af30ade13e1aad5507a85976cd80f425c2fc`.
+- Fresh task reviewer `m3_lint_scope_task_review`: spec compliance PASS and
+  quality APPROVE. Fresh exit auditor `m3_quality_independent_exit_audit`:
+  independently reproduced technical PASS; no actionable findings.
+- Independent evidence: 13 new + 72 M3 + 219 M2 + 35 formal/locks/ledger = 339;
+  all full-suite cases pass. Ordinary and no-ignore lint/complexity, Mypy 36,
+  38-package lock, frozen hashes, protected-file and whitespace checks pass.
+  Independent os.walk, archive Ruff and worktree Ruff inventories match 36/36.
+- Preservation evidence: AST expansion reconstructs the original ingestion
+  statement sequence, all old signatures remain, and baseline characterization
+  passes. Original-node/file retention was independently checked.
+- Independent mutations: broad ignore causes two real diagnostic failures;
+  post-CAS validation causes four forbidden-persistence failures; removing the
+  prior Registry projection comparison causes its signature regression to fail.
+  All changes were restored in the disposable archive; the entire 79-file HEAD
+  archive then matched source. All gates reran successfully afterward.
+- The 17 supplemental read/Blob/replay/malformed/legacy probes also passed;
+  they are not included in the 339 committed-test count. A macOS path-alias
+  error in the audit inventory script was corrected and retained as an audit
+  setup failure, not a product result.
+- Report: `research/module-reports/M3-2026-09-05-quality-remediation.md`.
+  Its adjacent `.tar.gz` preserves 24 original audit scripts/logs with a
+  recorded digest. The previous failed audit is not rewritten.
+- Boundary: no C1-C5 empirical claim, TER/PIP/BSR measurement, baseline result
+  or cross-agent generality is established. AI engineering review does not
+  substitute for author approval or independent human benchmark truth.
+- The frozen schedule and all earlier decisions remain unchanged. The branch
+  is retained without merge or push. M4 and M5 have not started; the author
+  must approve M3's exit before any next module.
