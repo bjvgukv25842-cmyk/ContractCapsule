@@ -51,7 +51,7 @@ def task(**changes: Any) -> TaskContext:
         "text": "  exact text\n",
     }
     values.update(changes)
-    return TaskContext(**values)
+    return TaskContext.model_validate(values)
 
 
 def ref(name: str = "capsule") -> CapsuleRef:
@@ -76,7 +76,7 @@ def manifest(**changes: Any) -> ViewManifest:
         "validation": ValidationReport(valid=True),
     }
     values.update(changes)
-    return ViewManifest(**values)
+    return ViewManifest.model_validate(values)
 
 
 def request(**changes: Any) -> CompileRequest:
@@ -90,7 +90,7 @@ def request(**changes: Any) -> CompileRequest:
         "tokenizer_profile": "tokenizer",
     }
     values.update(changes)
-    return CompileRequest(**values)
+    return CompileRequest.model_validate(values)
 
 
 def test_budget_subtracts_every_reservation_and_allows_zero() -> None:
@@ -287,8 +287,8 @@ def test_evidence_identity_is_canonical_and_contains_no_location() -> None:
         "span_digest": None,
         "resolver_version": "1",
     }
-    handle = EvidenceHandle(**fields)
-    other = EvidenceHandle(**(fields | {"atom_ids": ("a", "z")}))
+    handle = EvidenceHandle.model_validate(fields)
+    other = EvidenceHandle.model_validate(fields | {"atom_ids": ("a", "z")})
     assert handle.handle_id == other.handle_id
     assert handle.handle_id.startswith("sha256:")
     assert len(handle.handle_id) == 71
@@ -298,7 +298,7 @@ def test_evidence_identity_is_canonical_and_contains_no_location() -> None:
     )
     assert material.excerpt == "exact\n"
     with pytest.raises(ValidationError):
-        EvidenceHandle(**(fields | {"path": "private/secret"}))
+        EvidenceHandle.model_validate(fields | {"path": "private/secret"})
 
 
 def test_manifest_canonical_bytes_ignore_set_permutations_and_preserve_reasons() -> (
