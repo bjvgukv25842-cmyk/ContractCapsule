@@ -22,6 +22,12 @@ gate at `eec2c1fd173748f181dc8b672b3be320035426a8` on 2026-08-03. A planned
 path, unit test, property test, or product description is not counted as
 empirical evidence.
 
+M4 is now authorized and initialized on `codex/m4-view-compiler` from M3
+approval record `9743b34`. Its current deliverables are a derived execution plan
+and Proposed ADR-0004 only. Collective-interface semantics, runtime code and
+new dependencies remain behind ADR author approval. This adds no M4 system or
+experimental result; see `research/module-reports/M4.md`.
+
 ## Contribution Claims
 
 | ID | Claim boundary | System artifact | Formal case or experiment | Metric | Paper section | Evidence available through M2 | Evidence still missing | Human validation responsibility |

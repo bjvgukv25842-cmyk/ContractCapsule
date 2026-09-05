@@ -895,3 +895,54 @@
   not implicitly approve that ADR, M4's eventual exit, or M5.
 - Research boundary: engineering acceptance only; no formal experiment,
   empirical TER/PIP/BSR, baseline advantage, or generality result is established.
+
+## M4-001 - Isolated startup after approved M3 exit
+
+- Date: 2026-09-05
+- Status: **M4 STARTED IN PREPARATION; ADR APPROVAL REQUIRED**
+- Author-approved baseline: `4dbf4849c6e125d1cb5ac8d813e4aeb5dc75694d`.
+- M3 approval-record commit and M4 branch point:
+  `9743b34168e160878b9b9e8132512c540954f511`.
+- Created branch `codex/m4-view-compiler` and worktree
+  `.worktrees/m4-view-compiler` from the exact governance descendant. No main
+  branch merge or user-facing task creation occurred.
+- Baseline environment used `uv sync --locked --offline` without changing
+  dependencies; all 339 baseline tests passed in the new worktree (11.49s).
+- Read and hash-verified both complete frozen baselines. Existing M1 model,
+  source/tests, core schemas, protocol and dependency lock remain unchanged.
+- M4 runtime tasks are not started by this preparation record. No M5 work,
+  formal experiment, empirical claim or submission gate change is authorized.
+
+## M4-002 - Collective interface coverage ADR proposed
+
+- Date: 2026-09-05
+- Status: **PROPOSED; NOT AUTHOR-APPROVED OR IMPLEMENTED**
+- The author chose collective interface coverage with an ADR before code,
+  minimal local tokenizer/SemVer dependencies, and release-version constraints
+  separate from exact `/vN` interface names. The implementation request and
+  M3 exit approval retain the ADR gate; they do not automatically accept its text.
+- Proposal: `docs/adr/0004-m4-collective-interface-coverage.md`.
+- Derived execution plan:
+  `docs/superpowers/plans/2026-09-05-m4-view-compiler-execution-plan.md`.
+- The proposal separates local capsule admission from collection coverage,
+  preserves pre-ranking security checks, exact provider bindings and final
+  selected-provider coverage, and requires an explicit M1 singleton comparison.
+- M1 and frozen normative files are not edited. Any true frozen-semantic
+  conflict requires a separately approved versioned baseline, not a silent ADR
+  override. Neither new dependency nor new runtime profile is installed here.
+- Next author decision: accept or reject the ADR's concrete text. Technical
+  review of the draft cannot substitute for that decision or for M4's exit.
+- Draft review found two actionable ambiguities before author submission:
+  interface payload membership and root versus dependency lock ownership.
+  The proposal now explicitly requires full provider payloads for root task
+  interfaces, rejects ambiguous root providers in the exact input collection,
+  and reserves consumer-owned A-zone locks for that consumer's dependencies.
+  Output witnesses cannot authorize their own initial selection. The token
+  cost of full-payload units is disclosed; none of these draft rules is yet
+  implemented or recorded as author-approved.
+- Scoped rereview marked both findings addressed and found no new explicit
+  issue. The author-review draft SHA-256 is
+  `be057b3c85dd72c59f13193097b41b96a57a87f55408fcf71dbaf3cd6c2e46e9`.
+  This is a proposed-text identity, not an approval record or implementation
+  result. Full baseline regression after documentation: 339 passed in 8.49s;
+  complete no-ignore complexity and whitespace checks passed.
