@@ -1032,3 +1032,26 @@
 - One handoff received HTTP429 after the commit existed; report-only resumption
   inspected existing artifacts rather than reimplementing. No external CLI,
   search plugin, empirical measurement or M5 work occurred.
+
+## M4-007 - Graph, token/render and native evidence implementation checkpoint
+
+- Date recorded: 2026-09-06. Status: implemented service increments; independent
+  review and complete compiler acceptance pending.
+- Graph commits `211ffa0` and `9dc9112`: 85 focused /621 cumulative tests;
+  version constraints, exact provider locks, presence/unit distinction and
+  mandatory closure/conflicts. Names without known node types are retained as
+  missing obligations; no capsule-name heuristic or fake cyclic digest proof.
+- Counter/render commit `396a9f4`: 40 new tests, cumulative661. Local pinned
+  tokenizer profile/BPE only; total text accounting; exact P0 and structural
+  P1 including signed extensions; P2 exact excerpt, explicit source expansion.
+- Evidence commit `73f99ae`: 18 new tests, cumulative679; reauthorization,
+  Registry projection, native content/span digest and secret gates. Controlled
+  external mode uses configured local snapshots and never runtime network.
+- Task4 received only local review while dispatch was unavailable. Task5/6
+  used the disclosed local fallback. None was called independently approved.
+- Internal dispatch is available at resume: m4_services_backlog_review conducts
+  a fresh read-only review of these services while m4_integration_implementation
+  implements the absent compiler/manifest integration in disjoint files.
+- Resume target is exact `73f99aebe519e3b0857c9df5fbbeae99e06ff68c`. No original
+  test/schema/frozen baseline change is authorized. G1/G2 are not passed, G3
+  remains unapproved; M4 incomplete and M5 unstarted.
