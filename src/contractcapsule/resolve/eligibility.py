@@ -22,7 +22,7 @@ from contractcapsule.models.base import (
     StrictFrozenModel,
     TimestampString,
 )
-from contractcapsule.models.core import Atom, Capsule
+from contractcapsule.models.core import Atom, Capsule, ControlManifest
 from contractcapsule.models.view import Count, Eligibility, StringSet, TaskContext
 from contractcapsule.resolve.policies import (
     Sensitivity,
@@ -91,6 +91,32 @@ def _valid_at(atom: Atom, instant: datetime) -> bool:
     return atom.validity.from_ <= today and (
         atom.validity.until is None or today <= atom.validity.until
     )
+
+
+def _atom_scope_within_capsule(capsule: Capsule, atom: Atom, task: TaskContext) -> bool:
+    admitted_paths = tuple(
+        path
+        for path in task.paths
+        if paths_match(capsule.control_manifest.scope.paths, (path,))
+    )
+    # Narrow only scope evaluation; authorization and replay bind the original task.
+    scope_task = task.model_copy(update={"paths": admitted_paths})
+    return bool(admitted_paths) and atom_scope_matches(atom.scope, scope_task)
+
+
+def _publication_key(publication: PublishedCapsule) -> tuple[str, str]:
+    if (
+        type(publication) is not PublishedCapsule
+        or type(publication.capsule) is not Capsule
+    ):
+        raise CompileError("REGISTRY_INTEGRITY")
+    manifest = publication.capsule.control_manifest
+    if type(manifest) is not ControlManifest:
+        raise CompileError("REGISTRY_INTEGRITY")
+    identity = (manifest.capsule_id, manifest.version)
+    if not all(type(value) is str and value for value in identity):
+        raise CompileError("REGISTRY_INTEGRITY")
+    return identity
 
 
 def _ttl_valid(capsule: Capsule, atom: Atom, instant: datetime) -> bool:
@@ -229,7 +255,9 @@ class EligibilityResolver:
             lambda: sensitivity_within(atom.sensitivity, self.max_sensitivity),
             "SENSITIVITY_DENIED",
         )
-        _require(lambda: atom_scope_matches(atom.scope, task), "ATOM_SCOPE_DENIED")
+        _require(
+            lambda: _atom_scope_within_capsule(capsule, atom, task), "ATOM_SCOPE_DENIED"
+        )
         _require(lambda: _valid_at(atom, instant), "VALIDITY_DENIED")
         _require(
             lambda: atom.refresh_policy in {"on-source-change", "immutable"},
@@ -277,12 +305,8 @@ class EligibilityResolver:
         groups: dict[tuple[str, str], list[PublishedCapsule]] = {}
         for publication in capsules:
             try:
-                if type(publication) is not PublishedCapsule:
-                    raise CompileError("REGISTRY_INTEGRITY")
-                manifest = publication.capsule.control_manifest
-                groups.setdefault((manifest.capsule_id, manifest.version), []).append(
-                    publication
-                )
+                key = _publication_key(publication)
+                groups.setdefault(key, []).append(publication)
             except (AttributeError, TypeError, ValueError, CompileError):
                 counts["REGISTRY_INTEGRITY"] += 1
         selected: list[PublishedCapsule] = []

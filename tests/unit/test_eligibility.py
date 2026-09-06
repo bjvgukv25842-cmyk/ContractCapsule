@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -730,3 +731,104 @@ def test_signature_value_change_with_unchanged_core_digest_is_rejected(
     )
     result = resolver_for(fixture, published).eligible(changed, task_context(), READER)
     assert not result.allowed
+
+
+@pytest.mark.parametrize("entrypoint", ["eligible", "resolve"])
+@pytest.mark.parametrize(
+    ("atom_scope", "expected_ids"),
+    [
+        (("path:billing/**",), ()),
+        (("path:src/auth/**",), ("private-member",)),
+        (("environment:prod",), ("private-member",)),
+    ],
+)
+def test_atom_and_capsule_scope_require_the_same_task_path(
+    fixture: M4Fixture,
+    entrypoint: str,
+    atom_scope: tuple[str, ...],
+    expected_ids: tuple[str, ...],
+) -> None:
+    def narrow_capsule(raw: dict[str, Any]) -> None:
+        raw["control_manifest"]["scope"]["paths"] = ["src/auth/**"]
+
+    publication = fixture.publish(
+        atoms=({"atom_id": "private-member", "scope": atom_scope},),
+        amend=narrow_capsule,
+    )
+    task = task_context(paths=("src/auth/token.py", "billing/pay.py"))
+    resolver = resolver_for(fixture, publication)
+    if entrypoint == "eligible":
+        eligibility = resolver.eligible(publication.capsule, task, READER)
+        assert eligibility.atom_ids == expected_ids
+    else:
+        result = resolver.resolve((publication,), task, READER)
+        assert result.items[0].atom_ids == expected_ids
+        if not expected_ids:
+            assert "private-member" not in repr(result)
+            assert result.rejected_counts == {"ATOM_SCOPE_DENIED": 1}
+
+
+def test_scope_narrowing_preserves_original_authorization_task(
+    fixture: M4Fixture,
+) -> None:
+    def narrow_capsule(raw: dict[str, Any]) -> None:
+        raw["control_manifest"]["scope"]["paths"] = ["src/auth/**"]
+
+    publication = fixture.publish(amend=narrow_capsule)
+    task = task_context(paths=("src/auth/token.py", "billing/pay.py"))
+
+    class OriginalTaskPolicy(BrokenPolicy):
+        def authorize(
+            self,
+            capsule: Capsule,
+            atom: Atom | None,
+            candidate_task: TaskContext,
+            principal: Principal,
+        ) -> bool:
+            return candidate_task is task
+
+        def context_digest(
+            self, candidate_task: TaskContext, principal: Principal
+        ) -> str:
+            assert candidate_task is task
+            return super().context_digest(candidate_task, principal)
+
+    result = resolver_for(
+        fixture, publication, authorizer=OriginalTaskPolicy(True)
+    ).resolve((publication,), task, READER)
+    assert result.items[0].atom_ids == ("atom-0",)
+    assert task.paths == ("billing/pay.py", "src/auth/token.py")
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("field", ["capsule_id", "version", "inner_capsule"])
+def test_mixed_malformed_publication_identity_preserves_valid_admission(
+    fixture: M4Fixture,
+    field: str,
+    reverse: bool,
+) -> None:
+    publication = fixture.publish()
+    if field == "inner_capsule":
+        malformed = cast(
+            Capsule,
+            SimpleNamespace(
+                control_manifest=publication.capsule.control_manifest,
+                private_content="denied-private-content",
+            ),
+        )
+    else:
+        malformed = publication.capsule.model_copy(
+            update={
+                "control_manifest": publication.capsule.control_manifest.model_copy(
+                    update={field: 7}
+                )
+            }
+        )
+    forged = replace(publication, capsule=malformed)
+    inputs = (forged, publication) if reverse else (publication, forged)
+    result = resolver_for(fixture, publication).resolve(inputs, task_context(), READER)
+    assert len(result.items) == 1
+    assert result.items[0].published == publication
+    assert result.items[0].atom_ids == ("atom-0",)
+    assert result.rejected_counts == {"REGISTRY_INTEGRITY": 1}
+    assert "denied-private-content" not in repr(result)
