@@ -1008,3 +1008,27 @@
   native evidence checks, actual unauthorized-ranker isolation and locked replay.
 - Date risk: original G1/G2 dates are missed; G3 is not passed. No formal
   experiments or claim/schedule revision is performed. M5 remains unstarted.
+
+## M4-006 - Deterministic ranking and strict-input review
+
+- Date: 2026-09-06. Status: Task3 reviewed; complete M4 compiler still pending.
+- Commits `60b45eb` and `6bbcb92`; implementer m4_3_fts_ranker, independent
+  scoped reviewer m4_3_rank_review. Final task spec PASS /quality APPROVE.
+- Real in-memory FTS5/BM25 ranks every admitted formal atom, inserts stably,
+  literalizes query words and uses parameterized SQL. No persistent vector/
+  keyword index or permission decision is introduced in the ranker itself.
+- Concrete frozen services exposed a Task1 static typing defect: Protocol
+  metadata declared writable attributes. Only metadata declarations became
+  read-only properties, preserving all service method signatures and frozen
+  composition. Full Mypy consumer tests verify the correction without Any casts.
+- The review found serialization could repair malformed nested extension keys
+  or drop unknown Validity fields before checking. Main-agent diagnostics
+  confirmed both. Six genuine regression failures preceded the fix, which now
+  validates the original value tree before canonical duplicate comparison.
+- Final38 focused /536 cumulative tests reported passing; main focused38,
+  full Mypy49 and complete complexity verified. Exact prior schemas/models/
+  dependencies remain unchanged. Earlier 529 and528 counts are intermediate,
+  not discarded failures or additional experiments.
+- One handoff received HTTP429 after the commit existed; report-only resumption
+  inspected existing artifacts rather than reimplementing. No external CLI,
+  search plugin, empirical measurement or M5 work occurred.
