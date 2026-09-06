@@ -1055,3 +1055,46 @@
 - Resume target is exact `73f99aebe519e3b0857c9df5fbbeae99e06ff68c`. No original
   test/schema/frozen baseline change is authorized. G1/G2 are not passed, G3
   remains unapproved; M4 incomplete and M5 unstarted.
+
+## M4-008 - Independent Service Findings and Scoped Repairs
+
+- Date: 2026-09-06. Status: fixes implemented; independent rereview pending.
+- Reviewer `m4_services_backlog_review` independently reproduced three P1
+  blockers at73f99ae: foreign graph declaration ownership, Git locator drift
+  from its approved source-map, and Git promisor lazy-fetch side effects.
+- Repair `ed7feae` enforces declaration ownership, validates approved locator
+  metadata and real structural anchors, and uses M4-only offline Git reads.
+  No M3 ingestion behavior or frozen file is modified. Nine regression nodes
+  pass; the original report, exact diagnostic and honest RED history survive
+  in `research/module-reports/M4-services-independent-review.md` and related files.
+- An initial RED set included a setup already rejected by Registry; it is not
+  counted as a demonstrated vulnerability. A legacy-anchor positive/negative
+  check and exact declaring release coverage complete the regression set.
+- Passing local repair tests is not an independent approval. Final rereview
+  must verify all three findings against the repaired exact candidate.
+
+## M4-009 - Integrated Compiler Candidate and Verification Handoff
+
+- Date: 2026-09-06. Status: implementation delivered, independent exit pending.
+- Compiler commit `ccabe4e` connects real Registry, admission, rank, graph,
+  offline counter, renderer and native evidence. It adds locked replay, safe
+  manifests, current reauthorization and the independent B-zone schema.
+- Candidate `2ce16535ece97733404e91715bb2b7586b54de20` includes the explicitly
+  planned ninth-schema inventory adaptation. Only the old directory-set
+  assertion is extended; the eight core Schema bytes, eight equality checks
+  and original339 test IDs remain. This qualifies M4-007's broad preservation
+  shorthand without weakening core identity or removing a regression.
+- Controller clean-archive verification: 235 frozen tests, 745 full tests,
+  30 formal fixtures; 70/70 file discovery; both Ruff/complexity scans; full
+  Mypy70; offline lock/build/wheel checks. Six scoped injected faults are caught.
+  The full745 comprises retained339 and new406; these are engineering cases.
+- Initial archive tests rejected the macOS /tmp alias; the harness now uses
+  resolved /private/tmp without relaxing product checks. Preserve initial
+  failures and the corrected targeted P1 mutation alongside final output.
+- Independent review is not inferred from the clean archive. Existing agents
+  returned their reports, but final continuation lacked a callable dispatch/
+  follow-up tool. No external CLI/plugin or user task creation bypass was used.
+  Exact audit obligations are saved in M4-final-audit-handoff.md.
+- Update C2/RQ1/RQ2/C5 engineering evidence only. Formal completion remains
+  M0-M3 (4/12), not5/12. Independent M4 audit and author exit still required;
+  G1/G2 are missed, G3 unpassed, no schedule waiver, no M5 or formal experiments.

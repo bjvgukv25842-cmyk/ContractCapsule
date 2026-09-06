@@ -1,0 +1,38 @@
+"""Controller verification of the exact archived tree, with retained logs."""
+
+import hashlib
+import json
+import zipfile
+
+from run_checks import HEAD, PYTHON, ROOT, run
+
+failures = []
+for mode in ("authorization", "closure", "budget", "p1_budget", "evidence", "replay"):
+    result = run("mutation-" + mode, [str(PYTHON), str(ROOT / "mutation_check.py"), mode])
+    if result.returncode:
+        failures.append(mode)
+
+wheel_root = ROOT / "wheel"
+with zipfile.ZipFile(ROOT / "dist/contractcapsule-0.1.0-py3-none-any.whl") as wheel:
+    wheel.extractall(wheel_root)
+smoke = run("wheel-smoke", [str(PYTHON), "-c", (
+    "import sys; sys.path.insert(0, " + repr(str(wheel_root)) + "); "
+    "from contractcapsule.compile.budget import LocalTokenCounter; "
+    "from contractcapsule.compile.compiler import ViewCompiler; "
+    "assert LocalTokenCounter(model_id='neutral-test').count('hello world') == 2; "
+    "print('packaged compiler and offline tokenizer: PASS')"
+)])
+if smoke.returncode:
+    failures.append("wheel")
+identity = {
+    "technical_commit": "2ce16535ece97733404e91715bb2b7586b54de20",
+    "archive_sources_sha256": {
+        str(path.relative_to(HEAD)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for area in ("src", "tests", "schemas")
+        for path in sorted((HEAD / area).rglob("*"))
+        if path.is_file() and "__pycache__" not in path.parts
+    },
+    "supplemental_failures": failures,
+}
+(ROOT / "identity.json").write_text(json.dumps(identity, indent=2) + "\n")
+raise SystemExit(bool(failures))

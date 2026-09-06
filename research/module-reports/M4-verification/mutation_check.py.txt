@@ -1,0 +1,66 @@
+"""Disposable process-only mutation probes; not product or experimental data."""
+
+import hashlib
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parent / "head/src"))
+
+import contractcapsule.compile.evidence as native
+import contractcapsule.compile.session as session
+import contractcapsule.resolve.graph as graph
+from contractcapsule.models.view import TokenAccounting
+from contractcapsule.compile.errors import CompileError
+from contractcapsule.resolve.eligibility import EligibilityResolver
+
+
+def lower_accounting(sections, counter, budget):
+    return TokenAccounting(total=0, available=budget.available, sections={name: 0 for name, _ in sections}, boundary_adjustment=0)
+
+
+mode = sys.argv[1]
+cases = {
+    "authorization": "tests/unit/test_eligibility.py::test_ineligible_atom_never_reaches_ranker",
+    "closure": "tests/integration/test_compile_view.py::test_p0_miss_and_p1_dependency_are_mandatory",
+    "budget": "tests/unit/test_budget.py::test_p0_overflow_fails_closed",
+    "p1_budget": "tests/integration/test_compile_view.py::test_exact_budget_boundary_and_p1_overflow",
+    "evidence": "tests/integration/test_compile_view.py::test_changed_external_blob_is_rejected_before_ranking",
+    "replay": "tests/integration/test_compile_view.py::test_replay_mismatch_does_not_return_content",
+}
+if mode == "authorization":
+    mutation = patch.object(EligibilityResolver, "_atom_gates", lambda *args: None)
+elif mode == "closure":
+    mutation = patch.object(graph, "dependency_closure", lambda selected, graph: set(selected))
+elif mode == "budget":
+    mutation = patch.object(session, "account_tokens", lower_accounting)
+elif mode == "p1_budget":
+    mandatory = session.Compilation._mandatory
+
+    def ignore_p1_overflow(self, seeds, reason, overflow):
+        try:
+            return mandatory(self, seeds, reason, overflow)
+        except CompileError as error:
+            if error.code != "P1_OVERFLOW":
+                raise
+            self.tokens = TokenAccounting(
+                total=0, available=self.tokens.available,
+                sections={}, boundary_adjustment=0,
+            )
+
+    mutation = patch.object(session.Compilation, "_mandatory", ignore_p1_overflow)
+elif mode == "replay":
+    mutation = patch.object(session, "view_manifest_digest", lambda manifest: "sha256:" + "0" * 64)
+else:
+    original = native._digest
+    changed = b"# Changed\r\nMUST keep native bytes.\r\n"
+    digest = "sha256:" + hashlib.sha256(b"# Evidence\r\nMUST keep native bytes.\r\n").hexdigest()
+    native._digest = lambda data: digest if data == changed else original(data)
+    mutation = patch.object(session.Compilation, "_verify_source", staticmethod(lambda *args: None))
+
+with mutation:
+    status = pytest.main([cases[mode], "-q", "--tb=short"])
+print(f"MUTATION {mode}: pytest exit={status}; expected=1")
+sys.exit(0 if status == 1 else 1)

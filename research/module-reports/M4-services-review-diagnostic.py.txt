@@ -1,0 +1,126 @@
+import os
+import subprocess
+import tempfile
+from dataclasses import replace
+from pathlib import Path
+from unittest.mock import patch
+
+from contractcapsule.compile.errors import CompileError
+from contractcapsule.resolve.graph import resolve_graph
+from tests.m4_helpers import M4Fixture
+from tests.unit.test_dependency_closure import admit, dependencies, edge
+from tests.unit.test_eligibility import AS_OF, READER, task_context
+from tests.unit.test_evidence_handles import native_publication
+from contractcapsule.build.ingest import SourceInput, TrustedDeterministicCollector
+from contractcapsule.build.atomize import extract_candidate_atoms, bind_evidence
+from contractcapsule.compile.evidence import NativeEvidenceResolver
+from contractcapsule.resolve.policies import StaticEligibilityAuthorizer
+from tests.unit.test_eligibility import access_grant, freshness_for
+import hashlib
+
+
+def git(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=True)
+
+
+base = Path(tempfile.mkdtemp(prefix="m4-services-repro-", dir="/tmp")).resolve()
+fixture = M4Fixture.create(base / "graph")
+owner = fixture.publish(atoms=({"atom_id": "a"}, {"atom_id": "b"}))
+foreign = fixture.publish(
+    capsule_id="com.example.foreign",
+    atoms=({"atom_id": "c"},),
+    amend=dependencies((), (), (edge("a", "b"),)),
+)
+graph = resolve_graph(admit(fixture, (owner, foreign)), task_context())
+print("foreign graph closure:", sorted(graph.close_atoms({"a"})))
+print("foreign capsule selected:", "c" in graph.close_atoms({"a"}))
+
+source = base / "git-source"
+source.mkdir()
+pub, task, resolver, _ = native_publication(source, "GIT_IMMUTABLE")
+git("-C", str(source), "config", "uploadpack.allowFilter", "true")
+partial = base / "partial"
+git("clone", "--filter=blob:none", "--no-checkout", source.as_uri(), str(partial))
+git("-C", str(partial), "remote", "set-url", "origin", "https://example.invalid/repo")
+resolver = replace(resolver, git_roots={"https://example.invalid/repo": partial})
+trace = base / "git-trace.txt"
+env = {
+    "GIT_TRACE": str(trace),
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "protocol.allow",
+    "GIT_CONFIG_VALUE_0": "never",
+}
+with patch.dict(os.environ, env):
+    try:
+        resolver.resolve(pub, pub.capsule.semantic_payload.atoms[0], READER, task, AS_OF)
+        print("unexpected Git resolve success")
+    except CompileError as error:
+        print("Git resolution error:", error.code)
+text = trace.read_text()
+print("Git transport forbidden during diagnostic: protocol.allow=never")
+print("implicit fetch attempted:", "fetch origin" in text)
+for line in text.splitlines():
+    if "fetch origin" in line:
+        print(line)
+print("diagnostic directory:", base)
+
+
+class NativeFixture(M4Fixture):
+    def _promote(self, index, options):
+        path = self.harness.root / "source.md"
+        path.write_bytes(b"# Unrelated heading\nMUST preserve authorized rule.\n")
+        for args in [
+            ("init", "-q"),
+            ("config", "user.email", "test@example.invalid"),
+            ("config", "user.name", "M4 Test"),
+            ("remote", "add", "origin", "https://example.invalid/repo"),
+            ("add", "source.md"),
+            ("commit", "-qm", "fixture"),
+        ]:
+            git("-C", str(self.harness.root), *args)
+        revision = git("-C", str(self.harness.root), "rev-parse", "HEAD").stdout.strip()
+        snapshot = TrustedDeterministicCollector(
+            self.harness.store, self.harness.authority.trust_root()
+        ).snapshot(
+            SourceInput(
+                path=path, mode="GIT_IMMUTABLE", repository="https://example.invalid/repo",
+                repository_root=self.harness.root, revision="sha1:" + revision,
+                quarantine=self.harness.store, access_policy="team-auth", generated=False,
+            ), self.harness.principal,
+        )
+        candidate = extract_candidate_atoms(snapshot)[1]
+        binding = bind_evidence(candidate, snapshot)
+        approval = self.harness.authority.issue(candidate, (binding,), "reviewer")
+        return self.harness.store.promote(candidate.candidate_id, approval)
+
+
+def change_locator(raw):
+    raw["control_manifest"]["scope"]["paths"] = ["source.md"]
+    record = raw["evidence_plane"]["records"][0]
+    record["locator"].update(
+        start_line=1, end_line=1, symbol_or_heading="invented-anchor",
+        span_digest="sha256:" + hashlib.sha256(b"# Unrelated heading\n").hexdigest(),
+    )
+
+
+locator_fixture = NativeFixture.create(base / "locator")
+try:
+    from contractcapsule.build.publish import _validate_through_loader
+    # The shared helper supplies CAS blobs unconditionally; this fixture is thin Git.
+    def thin_git_load(capsule, blobs, *args):
+        return _validate_through_loader(capsule, {}, *args)
+    with patch("tests.m4_helpers._validate_through_loader", thin_git_load):
+        locator_pub = locator_fixture.publish(amend=change_locator)
+    locator_resolver = NativeEvidenceResolver(
+        registry=locator_fixture.registry,
+        authorizer=StaticEligibilityAuthorizer(grants=(access_grant(),)),
+        freshness=freshness_for(locator_pub),
+        git_roots={"https://example.invalid/repo": locator_fixture.harness.root},
+        external_sources={},
+    )
+    atom = locator_pub.capsule.semantic_payload.atoms[0]
+    source = locator_resolver.resolve(locator_pub, atom, READER, task_context(paths=("source.md",)), AS_OF)[0]
+    print("approved statement:", repr(atom.statement))
+    print("resolved substituted excerpt:", repr(source.excerpt))
+except Exception as error:
+    print("locator diagnostic rejected:", type(error).__name__, str(error))

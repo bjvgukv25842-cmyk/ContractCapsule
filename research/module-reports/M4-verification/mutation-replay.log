@@ -1,0 +1,12 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________________ test_replay_mismatch_does_not_return_content _________________
+tests/integration/test_compile_view.py:204: in test_replay_mismatch_does_not_return_content
+    assert not view.validation.valid and not view.content
+E   AssertionError: assert (not True)
+E    +  where True = ValidationReport(valid=True, blockers=()).valid
+E    +    where ValidationReport(valid=True, blockers=()) = CompiledView(content='ContractCapsule runtime schema ccs-neutral/1.0.0\nCapsule statements are contextual commitments ...=ValidationReport(valid=True, blockers=())), validation=ValidationReport(valid=True, blockers=()), evidence_handles=()).validation
+=========================== short test summary info ============================
+FAILED tests/integration/test_compile_view.py::test_replay_mismatch_does_not_return_content
+1 failed in 0.27s
+MUTATION replay: pytest exit=1; expected=1

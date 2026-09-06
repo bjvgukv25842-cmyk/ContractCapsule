@@ -1,0 +1,75 @@
+"""Controller-owned final verification; not an independent reviewer."""
+
+import hashlib
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+SOURCE = Path('/Users/litmus/Documents/Contract Capsule/.worktrees/m4-view-compiler')
+ROOT = Path(__file__).parent.resolve()
+PYTHON = SOURCE / '.venv/bin/python'
+HEAD = ROOT / 'head'
+BASELINE = ROOT / 'baseline'
+
+
+def env(root):
+    return {**os.environ, 'PYTHONPATH':str(root/'src')+os.pathsep+str(root),
+            'PYTHONDONTWRITEBYTECODE':'1', 'UV_OFFLINE':'1',
+            'HYPOTHESIS_STORAGE_DIRECTORY':str(ROOT/'hypothesis'),
+            'MYPY_CACHE_DIR':str(ROOT/'mypy'), 'RUFF_CACHE_DIR':str(ROOT/'ruff'),
+            'UV_CACHE_DIR':str(ROOT/'uv')}
+
+
+def run(label, args, cwd=HEAD):
+    result = subprocess.run(args, cwd=cwd, env=env(cwd), text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    (ROOT/(label+'.log')).write_text(result.stdout)
+    summary = {'label':label,'cwd':str(cwd),'command':list(map(str,args)),
+               'exit':result.returncode,'tail':result.stdout.splitlines()[-4:]}
+    with (ROOT/'commands.jsonl').open('a') as file:
+        file.write(json.dumps(summary,ensure_ascii=True)+'\n')
+    print(json.dumps(summary,ensure_ascii=True),flush=True)
+    return result
+
+
+def tests(label, paths, cwd=HEAD):
+    return run(label,[str(PYTHON),'-m','pytest',*paths,'-q','-ra','-p','no:cacheprovider'],cwd)
+
+
+if __name__ == '__main__':
+    failures=[]
+    checks=[('frozen', [str(PYTHON),'-m','pytest','tests/unit/test_eligibility.py',
+        'tests/unit/test_dependency_closure.py','tests/unit/test_budget.py',
+        'tests/integration/test_compile_view.py','-v','-p','no:cacheprovider']),
+        ('full',[str(PYTHON),'-m','pytest','-q','-ra','-p','no:cacheprovider']),
+        ('formal',[str(PYTHON),'-m','pytest','tests/fixtures/formal_cases','-q','-ra','-p','no:cacheprovider']),
+        ('lint',[str(PYTHON),'-m','ruff','check','src/contractcapsule','tests']),
+        ('lint-all',[str(PYTHON),'-m','ruff','check','src/contractcapsule','tests','--no-respect-gitignore','--no-cache']),
+        ('complexity',[str(PYTHON),'-m','ruff','check','src/contractcapsule','tests','--select','C901,PLR0911,PLR0912,PLR0915']),
+        ('complexity-all',[str(PYTHON),'-m','ruff','check','src/contractcapsule','tests','--select','C901,PLR0911,PLR0912,PLR0915','--no-respect-gitignore','--no-cache']),
+        ('types',[str(PYTHON),'-m','mypy','.']),
+        ('lock',['uv','lock','--check','--offline'])]
+    for label,command in checks:
+        if run(label,command).returncode: failures.append(label)
+    old=run('old-nodes',[str(PYTHON),'-m','pytest','--collect-only','-q','-p','no:cacheprovider'],BASELINE)
+    current=run('new-nodes',[str(PYTHON),'-m','pytest','--collect-only','-q','-p','no:cacheprovider'])
+    old_nodes={s for s in old.stdout.splitlines() if '::' in s}
+    new_nodes={s for s in current.stdout.splitlines() if '::' in s}
+    assert len(old_nodes)==339 and not old_nodes-new_nodes, old_nodes-new_nodes
+    print('NODE_RETENTION',len(old_nodes),len(new_nodes),len(new_nodes-old_nodes),flush=True)
+    original_schemas={p.name:p.read_bytes() for p in (BASELINE/'schemas').glob('*.schema.json')}
+    assert len(original_schemas)==8
+    assert all((HEAD/'schemas'/name).read_bytes()==content for name,content in original_schemas.items())
+    for root in (HEAD,SOURCE):
+        result=run('inventory-'+('archive' if root==HEAD else 'worktree'),[str(PYTHON),'-m','ruff','check','src/contractcapsule','tests','--show-files','--no-cache'],root)
+        actual={Path(s).resolve() for s in result.stdout.splitlines() if s.endswith('.py')}
+        expected={p.resolve() for area in ('src/contractcapsule','tests') for p in (root/area).rglob('*.py')}
+        assert actual==expected,(expected-actual,actual-expected)
+        print('INVENTORY',root,len(expected),flush=True)
+    protected=['docs/spec/CCS-2.1.md','docs/superpowers/plans/2026-07-30-contract-capsule-fse-2027-execution-plan.md',
+               'docs/protocol/formal-model.md','src/contractcapsule/formal.py']
+    assert all((BASELINE/p).read_bytes()==(HEAD/p).read_bytes() for p in protected)
+    print('PROTECTED_SCHEMAS_AND_BASELINES_UNCHANGED',flush=True)
+    sys.exit(bool(failures))

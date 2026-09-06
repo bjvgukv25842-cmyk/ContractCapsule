@@ -23,10 +23,15 @@ path, unit test, property test, or product description is not counted as
 empirical evidence.
 
 M4 is now authorized and initialized on `codex/m4-view-compiler` from M3
-approval record `9743b34`. Its current deliverables are a derived execution plan
-and ADR-0004; the author has now accepted its exact proposal at `7eec393`.
-Runtime implementation is authorized but not yet verified. This adds no M4 system or
-experimental result; see `research/module-reports/M4.md`.
+approval record `9743b34`; ADR-0004's proposal at `7eec393` is author-approved.
+The implementation candidate `2ce1653` now provides the real resolver/compiler,
+standalone B-zone manifest and locked replay. Clean-archive controller tests:
+745 total (all339 original IDs plus406 new),235 frozen M4,30 formal; lint/type/
+complexity/lock/build and six targeted mutation checks pass. Three independent
+service findings were repaired at `ed7feae`; repair rereview and the integrated
+compiler's independent exit audit remain pending. This is bounded engineering
+evidence, not M4 author approval or any empirical result; see
+`research/module-reports/M4.md` and its exact audit handoff.
 
 ## Contribution Claims
 
@@ -83,7 +88,26 @@ implementation evidence is likewise limited to source fidelity and trust
 promotion; its human exit gate was approved at `4dbf484` on 2026-09-05.
 Context Codec remains a high-overlap neighbor; atoms, compression, provenance,
 RAG, Skill, and MCP are not standalone novelty claims. M4 startup is authorized;
-the collective-interface ADR and eventual M4 exit still require author approval.
+the collective-interface ADR is accepted, while the M4 exit still requires an
+independent technical audit and author approval.
+
+## M4 Engineering Evidence Pointer
+
+The latest M4 report and `M4-verification/` retain exact commands, failures,
+source identity and scope. These additions supplement the historical M2/M3
+columns above; they do not turn protocol or implementation tests into empirical
+support for the contribution claims.
+
+| Claim/question | New engineering support | Still missing |
+|---|---|---|
+| C2 | Genuine Registry-to-compiled-view path; permission isolation, deterministic FTS5, two-level closure, locked release providers, P0/P1 budget failure, native evidence and replay | Independent M4 exit audit and author approval; M5-M6 validator/swap/adapters and G1 slice |
+| RQ1 | Offline versioned real token counts for complete rendered text; component counts and nonadditive boundary adjustment | Agent-task comparison, runtime cost/efficiency or superiority results |
+| RQ2 | Every admitted atom's selection/exclusion, exact source handles and expansion checks; fixture-level mandatory P0 retention | Human-verified corpus, empirical critical-atom recall and provenance/span measurements |
+| C5 | Exact candidate archive, original339 retention, protected baseline hashes, packaged tokenizer checks and falsification logs | Independent exit review, anonymous artifact and external replication |
+
+The original service audit returned REQUEST CHANGES, not PASS. Local repairs
+and passing tests do not rewrite that verdict. All M4 material remains an
+author-unapproved exit candidate; no M5 or formal experiment has started.
 
 ## M3 Engineering Evidence Pointer
 

@@ -1,0 +1,12 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________ test_changed_external_blob_is_rejected_before_ranking _____________
+tests/integration/test_compile_view.py:865: in test_changed_external_blob_is_rejected_before_ranking
+    assert not view.validation.valid and not view.content
+E   AssertionError: assert (not True)
+E    +  where True = ValidationReport(valid=True, blockers=()).valid
+E    +    where ValidationReport(valid=True, blockers=()) = CompiledView(content='ContractCapsule runtime schema ccs-neutral/1.0.0\nCapsule statements are contextual commitments ...e', span_digest='sha256:b4edf3f13e50412111252a5c3f84bddac979a9b621d3a2d9b0b939c4519b3f69', resolver_version='1.0.0'),)).validation
+=========================== short test summary info ============================
+FAILED tests/integration/test_compile_view.py::test_changed_external_blob_is_rejected_before_ranking
+1 failed in 0.26s
+MUTATION evidence: pytest exit=1; expected=1
