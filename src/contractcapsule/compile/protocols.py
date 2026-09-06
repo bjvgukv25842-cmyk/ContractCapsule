@@ -9,7 +9,8 @@ from contractcapsule.storage.registry import PublishedCapsule
 
 
 class EligibilityAuthorizer(Protocol):
-    version: str
+    @property
+    def version(self) -> str: ...
 
     def authorize(
         self,
@@ -23,7 +24,8 @@ class EligibilityAuthorizer(Protocol):
 
 
 class FreshnessChecker(Protocol):
-    version: str
+    @property
+    def version(self) -> str: ...
 
     def check(self, capsule: Capsule, atom: Atom | None, as_of: str) -> bool: ...
 
@@ -31,22 +33,31 @@ class FreshnessChecker(Protocol):
 
 
 class AtomRanker(Protocol):
-    version: str
+    @property
+    def version(self) -> str: ...
 
     def rank_atoms(self, atoms: list[Atom], task: TaskContext) -> list[RankedAtom]: ...
 
 
 class TokenCounter(Protocol):
-    profile: str
-    model_id: str
-    version: str
-    config_digest: str
+    @property
+    def profile(self) -> str: ...
+
+    @property
+    def model_id(self) -> str: ...
+
+    @property
+    def version(self) -> str: ...
+
+    @property
+    def config_digest(self) -> str: ...
 
     def count(self, text: str) -> int: ...
 
 
 class EvidenceHandleResolver(Protocol):
-    version: str
+    @property
+    def version(self) -> str: ...
 
     def resolve(
         self,
@@ -59,7 +70,8 @@ class EvidenceHandleResolver(Protocol):
 
 
 class ViewRenderer(Protocol):
-    version: str
+    @property
+    def version(self) -> str: ...
 
     def render(
         self,
