@@ -986,3 +986,25 @@
   while exact lock equality retains the full published version string.
 - Fresh baseline: 339 passed in 8.53s; offline lock check passes. No M4 runtime
   behavior is claimed yet; tokenizer failure/offline behavior needs tests.
+
+## M4-005 - Runtime contract and local-admission checkpoint
+
+- Date: 2026-09-06. Status: bounded technical increments reviewed; M4 incomplete.
+- Task1 model/protocol commits `53c6a23` and `036467c`, reviewer
+  `m4_1_contracts_review`: PASS. 54 focused /393 accumulated tests; full
+  Mypy41 and extended complexity verified. No placeholder compiler.
+- Task2 admission commits `8e0d1cc` and `9531920`, reviewer
+  `m4_2_admission_review`: PASS after one scoped fix round. Reviewer initially
+  exposed cross-task-path scope conjunction and malformed identity sorting.
+  Both were reproduced through real Registry tests (8 RED), corrected (13
+  added GREEN), and independently marked addressed. The entire task has105
+  cases and the cumulative suite498 (main agent rerun12.87s).
+- Complete input projection includes immutable publication signature fields,
+  but omits derived/runtime sidecars, registry publication time and expected
+  output digest. This prevents output/input digest recursion and distinguishes
+  transport metadata from reproducible compiler inputs.
+- Local admission is not whole-provider coverage; zero/partial atom membership
+  stays explicit. The later graph/compiler must enforce complete provider units,
+  native evidence checks, actual unauthorized-ranker isolation and locked replay.
+- Date risk: original G1/G2 dates are missed; G3 is not passed. No formal
+  experiments or claim/schedule revision is performed. M5 remains unstarted.
