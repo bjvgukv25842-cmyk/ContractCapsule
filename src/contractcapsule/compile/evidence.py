@@ -7,13 +7,9 @@ from pathlib import Path
 from types import MappingProxyType
 
 from contractcapsule.audit.quarantine import scan_secrets
-from contractcapsule.build.ingest import (
-    _git_show,
-    _strict_absolute,
-    _verify_git_commit,
-    _verify_repository_identity,
-)
+from contractcapsule.build.ingest import _strict_absolute
 from contractcapsule.compile.errors import CompileError
+from contractcapsule.compile.git_evidence import read_git_evidence, validate_git_locator
 from contractcapsule.compile.protocols import EligibilityAuthorizer, FreshnessChecker
 from contractcapsule.models.base import Principal, is_safe_relative_path
 from contractcapsule.models.core import Atom, EvidenceRecord
@@ -40,6 +36,7 @@ def _local_bytes(path: Path) -> bytes:
 def _source_span(record: EvidenceRecord, content: bytes) -> tuple[str, str | None]:
     text = content.decode("utf-8", errors="strict")
     if record.mode == "GIT_IMMUTABLE":
+        validate_git_locator(record, text)
         locator: Mapping[str, object] = record.locator.model_dump()
     elif "x-source-map" in record.extensions:
         source = record.extensions["x-source-map"]
@@ -122,10 +119,7 @@ class NativeEvidenceResolver:
                 record.path
             ):
                 raise CompileError("EVIDENCE_UNAVAILABLE")
-            root = _strict_absolute(self.git_roots[record.repository])
-            _verify_repository_identity(root, record.repository)
-            _verify_git_commit(root, record.revision)
-            content = _git_show(root, record.revision, record.path)
+            content = read_git_evidence(self.git_roots[record.repository], record)
         else:
             if record.uri not in self.external_sources:
                 raise CompileError("EVIDENCE_UNAVAILABLE")

@@ -264,8 +264,10 @@ class _Assembly:
             return self.owners[node]
         return tuple(ref for ref in self.refs.values() if node == _presence(ref))
 
-    def _required_target(self, source: str, target: str) -> str:
-        consumers = self.node_owners(source)
+    def _required_target(
+        self, source: str, target: str, declaring: CapsuleRef | None = None
+    ) -> str:
+        consumers = (declaring,) if declaring is not None else self.node_owners(source)
         providers = self.node_owners(target)
         for consumer in consumers:
             for provider in providers:
@@ -289,29 +291,41 @@ class _Assembly:
             return _unit(provider)
         return target
 
-    def explicit(self, edge: DependencyEdge) -> None:
+    def explicit(self, edge: DependencyEdge, declaring: CapsuleRef) -> None:
         if edge.version_constraint is not None:
             constraint_terms(edge.version_constraint)
         sources, targets = self.nodes(edge.source), self.nodes(edge.target)
+        payload = self.publications[declaring.key].capsule.semantic_payload.atoms
+        if edge.source not in {
+            declaring.capsule_id,
+            *(atom.atom_id for atom in payload),
+        }:
+            raise CompileError("INVALID_GRAPH")
+        if edge.source == declaring.capsule_id:
+            sources = (_presence(declaring),)
         if not self.node_owners(sources[0]) and edge.source not in self.known_atoms:
             raise CompileError("INVALID_GRAPH")
         for source in sources:
             if not self.node_owners(source):
                 continue
-            for target in self._targets_for(source, targets, edge):
+            for target in self._targets_for(source, targets, edge, declaring):
                 if not self._version_matches(target, edge):
                     if edge.edge_type == "requires" and edge.mandatory:
                         raise CompileError("MISSING_DEPENDENCY")
                     continue
                 resolved = (
-                    self._required_target(source, target)
+                    self._required_target(source, target, declaring)
                     if edge.edge_type == "requires" and edge.mandatory
                     else target
                 )
                 self.add(source, resolved, edge.edge_type, edge.mandatory)
 
     def _targets_for(
-        self, source: str, targets: tuple[str, ...], edge: DependencyEdge
+        self,
+        source: str,
+        targets: tuple[str, ...],
+        edge: DependencyEdge,
+        declaring: CapsuleRef,
     ) -> tuple[str, ...]:
         if not (
             edge.edge_type == "requires"
@@ -327,7 +341,7 @@ class _Assembly:
             and all(
                 consumer == self.node_owners(target)[0]
                 or self.locked(consumer, self.node_owners(target)[0])
-                for consumer in self.node_owners(source)
+                for consumer in (declaring,)
             )
         ]
         provider = self.unique(candidates, "MISSING_DEPENDENCY")
@@ -357,7 +371,7 @@ class _Assembly:
                 self.add(atom.atom_id, target, "conflicts")
         for publication in self.publications.values():
             for edge in publication.capsule.dependency_graph.edges:
-                self.explicit(edge)
+                self.explicit(edge, _ref(publication))
 
 
 def resolve_graph(admission: AdmissionResult, task: TaskContext) -> ResolvedGraph:
