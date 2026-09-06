@@ -271,6 +271,17 @@ class _Assembly:
             for provider in providers:
                 if consumer != provider and not self.locked(consumer, provider):
                     raise CompileError("MISSING_DEPENDENCY")
+                if consumer != provider:
+                    self.providers.append(
+                        ProviderWitness(
+                            consumer=consumer,
+                            requirement=f"requires:{source}->{target}",
+                            provider=provider,
+                            atom_ids=self._payload(provider)
+                            if target.startswith(_PRIVATE)
+                            else (target,),
+                        )
+                    )
         if target.startswith(_PRIVATE):
             provider = providers[0]
             if provider.key not in self.complete:
@@ -287,7 +298,7 @@ class _Assembly:
         for source in sources:
             if not self.node_owners(source):
                 continue
-            for target in targets:
+            for target in self._targets_for(source, targets, edge):
                 if not self._version_matches(target, edge):
                     if edge.edge_type == "requires" and edge.mandatory:
                         raise CompileError("MISSING_DEPENDENCY")
@@ -299,16 +310,40 @@ class _Assembly:
                 )
                 self.add(source, resolved, edge.edge_type, edge.mandatory)
 
+    def _targets_for(
+        self, source: str, targets: tuple[str, ...], edge: DependencyEdge
+    ) -> tuple[str, ...]:
+        if not (
+            edge.edge_type == "requires"
+            and edge.mandatory
+            and targets[0].startswith(_PRIVATE)
+        ):
+            return targets
+        candidates = [
+            self.node_owners(target)[0]
+            for target in targets
+            if self.node_owners(target)[0].key in self.complete
+            and self._version_matches(target, edge)
+            and all(
+                consumer == self.node_owners(target)[0]
+                or self.locked(consumer, self.node_owners(target)[0])
+                for consumer in self.node_owners(source)
+            )
+        ]
+        provider = self.unique(candidates, "MISSING_DEPENDENCY")
+        return (_presence(provider),)
+
     def _version_matches(self, target: str, edge: DependencyEdge) -> bool:
         if edge.version_constraint is None or edge.edge_type not in {
             "requires",
             "conflicts",
         }:
             return True
-        return all(
+        matches = tuple(
             satisfies(ref.version, edge.version_constraint)
             for ref in self.node_owners(target)
         )
+        return any(matches) if edge.edge_type == "conflicts" else all(matches)
 
     def atomic_edges(self) -> None:
         for atom in self.atoms.values():
@@ -334,12 +369,11 @@ def resolve_graph(admission: AdmissionResult, task: TaskContext) -> ResolvedGrap
     graph = DependencyGraph(
         edges=tuple(assembly.edges[key] for key in sorted(assembly.edges))
     )
-    providers = tuple(
-        sorted(
-            assembly.providers,
-            key=lambda witness: canonical_json_bytes(witness.model_dump(mode="json")),
-        )
-    )
+    witnesses = {
+        canonical_json_bytes(witness.model_dump(mode="json")): witness
+        for witness in assembly.providers
+    }
+    providers = tuple(witnesses[key] for key in sorted(witnesses))
     return ResolvedGraph(
         atoms=dict(sorted(assembly.atoms.items())),
         owners=dict(sorted(assembly.owners.items())),
