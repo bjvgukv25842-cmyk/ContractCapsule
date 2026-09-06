@@ -141,3 +141,17 @@ def test_duplicate_section_names_are_rejected(counter: LocalTokenCounter) -> Non
         account_tokens(
             (("same", "a"), ("same", "b")), counter, ViewBudget(model_input_tokens=10)
         )
+
+
+def test_p0_overflow_fails_closed(tmp_path: Path) -> None:
+    from tests.integration.test_compile_view import pipeline
+    from tests.m4_helpers import M4Fixture
+
+    fixture = M4Fixture.create(tmp_path)
+    pub = fixture.publish(atoms=({"compression_class": "P0_EXACT"},))
+    compiler, request = pipeline(fixture, (pub,), LocalTokenCounter("frozen-test"))
+    request = request.model_copy(update={"budget": ViewBudget(model_input_tokens=1)})
+    view = compiler.compile_view(request)
+    assert view.validation.blockers == ("P0_OVERFLOW",)
+    assert view.content == ""
+    assert view.manifest.tokens.total > view.manifest.tokens.available

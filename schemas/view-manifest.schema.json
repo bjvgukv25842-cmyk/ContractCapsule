@@ -1,0 +1,394 @@
+{
+  "$defs": {
+    "CapsuleRef": {
+      "additionalProperties": false,
+      "properties": {
+        "capsule_id": {
+          "minLength": 1,
+          "title": "Capsule Id",
+          "type": "string"
+        },
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "capsule_id",
+        "version",
+        "digest"
+      ],
+      "title": "CapsuleRef",
+      "type": "object"
+    },
+    "ClosureLink": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "title": "ClosureLink",
+      "type": "object"
+    },
+    "Conflict": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target",
+        "reason"
+      ],
+      "title": "Conflict",
+      "type": "object"
+    },
+    "DecisionRecord": {
+      "additionalProperties": false,
+      "description": "Public records may describe admitted atoms only; denial counts are aggregate.",
+      "properties": {
+        "atom_id": {
+          "minLength": 1,
+          "title": "Atom Id",
+          "type": "string"
+        },
+        "capsule": {
+          "$ref": "#/$defs/CapsuleRef"
+        },
+        "outcome": {
+          "enum": [
+            "selected",
+            "excluded"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "capsule",
+        "atom_id",
+        "outcome",
+        "reason"
+      ],
+      "title": "DecisionRecord",
+      "type": "object"
+    },
+    "ProviderWitness": {
+      "additionalProperties": false,
+      "properties": {
+        "atom_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Atom Ids",
+          "type": "array"
+        },
+        "consumer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CapsuleRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider": {
+          "$ref": "#/$defs/CapsuleRef"
+        },
+        "requirement": {
+          "minLength": 1,
+          "title": "Requirement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "consumer",
+        "requirement",
+        "provider",
+        "atom_ids"
+      ],
+      "title": "ProviderWitness",
+      "type": "object"
+    },
+    "ServiceStamp": {
+      "additionalProperties": false,
+      "properties": {
+        "config_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Config Digest",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "config_digest"
+      ],
+      "title": "ServiceStamp",
+      "type": "object"
+    },
+    "TokenAccounting": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Available",
+          "type": "integer"
+        },
+        "boundary_adjustment": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "title": "Boundary Adjustment",
+          "type": "integer"
+        },
+        "sections": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Sections",
+          "type": "object"
+        },
+        "total": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "available",
+        "sections",
+        "boundary_adjustment"
+      ],
+      "title": "TokenAccounting",
+      "type": "object"
+    },
+    "ValidationReport": {
+      "additionalProperties": false,
+      "properties": {
+        "blockers": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Blockers",
+          "type": "array"
+        },
+        "valid": {
+          "title": "Valid",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "valid"
+      ],
+      "title": "ValidationReport",
+      "type": "object"
+    }
+  },
+  "$id": "https://contractcapsule.invalid/schemas/view-manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "as_of": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$",
+      "title": "As Of",
+      "type": "string"
+    },
+    "capsules": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CapsuleRef"
+      },
+      "title": "Capsules",
+      "type": "array"
+    },
+    "closure": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ClosureLink"
+      },
+      "title": "Closure",
+      "type": "array"
+    },
+    "compiler_version": {
+      "default": "0.1.0",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
+      "title": "Compiler Version",
+      "type": "string"
+    },
+    "conflicts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Conflict"
+      },
+      "title": "Conflicts",
+      "type": "array"
+    },
+    "decisions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DecisionRecord"
+      },
+      "title": "Decisions",
+      "type": "array"
+    },
+    "expanded_evidence": {
+      "default": [],
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Expanded Evidence",
+      "type": "array"
+    },
+    "model_id": {
+      "minLength": 1,
+      "title": "Model Id",
+      "type": "string"
+    },
+    "permission_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Permission Digest",
+      "type": "string"
+    },
+    "profile": {
+      "const": "CCS-2.1-m4-collective-interfaces-v1",
+      "default": "CCS-2.1-m4-collective-interfaces-v1",
+      "title": "Profile",
+      "type": "string"
+    },
+    "providers": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ProviderWitness"
+      },
+      "title": "Providers",
+      "type": "array"
+    },
+    "rejected_counts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Rejected Counts",
+      "type": "object"
+    },
+    "renderer_version": {
+      "minLength": 1,
+      "title": "Renderer Version",
+      "type": "string"
+    },
+    "repository": {
+      "minLength": 1,
+      "title": "Repository",
+      "type": "string"
+    },
+    "request_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Request Digest",
+      "type": "string"
+    },
+    "services": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ServiceStamp"
+      },
+      "title": "Services",
+      "type": "array"
+    },
+    "task_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Task Digest",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "tenant": {
+      "minLength": 1,
+      "title": "Tenant",
+      "type": "string"
+    },
+    "tokenizer_profile": {
+      "minLength": 1,
+      "title": "Tokenizer Profile",
+      "type": "string"
+    },
+    "tokens": {
+      "$ref": "#/$defs/TokenAccounting"
+    },
+    "validation": {
+      "$ref": "#/$defs/ValidationReport"
+    }
+  },
+  "required": [
+    "task_id",
+    "tenant",
+    "repository",
+    "as_of",
+    "task_digest",
+    "permission_digest",
+    "request_digest",
+    "model_id",
+    "tokenizer_profile",
+    "renderer_version",
+    "tokens",
+    "validation"
+  ],
+  "title": "ViewManifest",
+  "type": "object"
+}

@@ -832,3 +832,32 @@ def test_mixed_malformed_publication_identity_preserves_valid_admission(
     assert result.items[0].atom_ids == ("atom-0",)
     assert result.rejected_counts == {"REGISTRY_INTEGRITY": 1}
     assert "denied-private-content" not in repr(result)
+
+
+def test_ineligible_atom_never_reaches_ranker(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from contractcapsule.compile.budget import LocalTokenCounter
+    from contractcapsule.resolve.rank import FTS5BM25Ranker
+    from tests.integration.test_compile_view import pipeline
+
+    fixture = M4Fixture.create(tmp_path)
+    pub = fixture.publish(
+        atoms=(
+            {"atom_id": "allowed", "compression_class": "P0_EXACT"},
+            {"atom_id": "denied", "statement": "token " * 20, "scope": ("path:other/**",)},
+        )
+    )
+    compiler, request = pipeline(fixture, (pub,), LocalTokenCounter("frozen-test"))
+    original = FTS5BM25Ranker.rank_atoms
+    observed: list[str] = []
+
+    def sentinel(self, atoms, task):
+        observed.extend(atom.atom_id for atom in atoms)
+        return original(self, atoms, task)
+
+    with patch.object(FTS5BM25Ranker, "rank_atoms", sentinel):
+        view = compiler.compile_view(request)
+    assert view.validation.valid
+    assert observed == ["allowed"]
+    assert "denied" not in view.model_dump_json()
