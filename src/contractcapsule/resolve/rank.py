@@ -12,7 +12,7 @@ from pydantic import TypeAdapter
 from contractcapsule.compile.errors import CompileError
 from contractcapsule.models.base import SemVer
 from contractcapsule.models.canonical import canonical_json_bytes
-from contractcapsule.models.core import Atom
+from contractcapsule.models.core import Atom, Validity
 from contractcapsule.models.view import RankedAtom, TaskContext
 
 _WORDS = re.compile(r"[^\W_]+", re.UNICODE)
@@ -28,9 +28,16 @@ def _validated_atom(atom: Atom) -> Atom:
     try:
         if type(atom) is not Atom or set(vars(atom)) != set(Atom.model_fields):
             raise ValueError("invalid atom type or fields")
-        checked = Atom.model_validate(
-            atom.model_dump(mode="python", by_alias=True, warnings="error")
-        )
+        if type(atom.validity) is not Validity or set(vars(atom.validity)) != set(
+            Validity.model_fields
+        ):
+            raise ValueError("invalid validity type or fields")
+        # Validate original data before serializers can rewrite keys or omit fields.
+        values = dict(vars(atom))
+        validity = dict(vars(atom.validity))
+        validity["from"] = validity.pop("from_")
+        values["validity"] = validity
+        checked = Atom.model_validate(values)
         if checked.status != "validated":
             raise ValueError("formal atom required")
         return checked

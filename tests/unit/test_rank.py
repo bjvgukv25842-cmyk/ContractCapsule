@@ -211,6 +211,59 @@ def test_non_atom_objects_are_rejected(value: Any) -> None:
         FTS5BM25Ranker().rank_atoms([value], task())
 
 
+@pytest.mark.parametrize("nested", [{1: "changed"}, {1: "lost", "1": "kept"}])
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_original_extension_keys_cannot_be_rewritten_before_validation(
+    nested: dict[Any, str], duplicate: bool
+) -> None:
+    malformed = atom("same", "orchid").model_copy(
+        update={"extensions": {"x-data": nested}}
+    )
+    atoms = [malformed]
+    if duplicate:
+        atoms.insert(
+            0,
+            atom(
+                "same",
+                "orchid",
+                extensions={"x-data": {"1": nested.get("1", "changed")}},
+            ),
+        )
+    with pytest.raises(CompileError, match="^INVALID_RANKING_INPUT$"):
+        FTS5BM25Ranker().rank_atoms(atoms, task("orchid"))
+
+
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_unknown_nested_model_fields_cannot_disappear_before_validation(
+    duplicate: bool,
+) -> None:
+    valid = atom("same", "orchid")
+    malformed = valid.model_copy(
+        update={"validity": valid.validity.model_copy(update={"extra": "bad"})}
+    )
+    with pytest.raises(CompileError, match="^INVALID_RANKING_INPUT$"):
+        FTS5BM25Ranker().rank_atoms(
+            [valid, malformed] if duplicate else [malformed], task("orchid")
+        )
+
+
+def test_valid_nested_extension_containers_and_full_atom_remain_unchanged() -> None:
+    original = atom(
+        "nested",
+        "orchid",
+        extensions={"x-data": {"items": [1, "one", None, True, {"nested": [2.5]}]}},
+    )
+    result = FTS5BM25Ranker().rank_atoms([original], task("orchid"))
+    assert result[0].atom == original
+    assert result[0].atom.extensions["x-data"]["items"] == (
+        1,
+        "one",
+        None,
+        True,
+        {"nested": (2.5,)},
+    )
+
+
 def test_per_call_isolation_returns_only_current_inputs_and_empty_input() -> None:
     ranker = FTS5BM25Ranker()
     ranker.rank_atoms([atom("previous", "orchid")], task("orchid"))
