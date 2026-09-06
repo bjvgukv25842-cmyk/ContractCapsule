@@ -134,7 +134,9 @@ def test_static_capsule_schema_and_python_model_accept_the_same_valid_object() -
 def test_all_static_schema_documents_exactly_match_the_python_models() -> None:
     schema_root = Path(__file__).parents[2] / "schemas"
     documents = schema_documents()
-    assert {path.name for path in schema_root.glob("*.schema.json")} == set(documents)
+    assert {path.name for path in schema_root.glob("*.schema.json")} == (
+        set(documents) | {"view-manifest.schema.json"}
+    )
     for filename, expected in documents.items():
         actual = json.loads((schema_root / filename).read_text(encoding="utf-8"))
         assert actual == expected
