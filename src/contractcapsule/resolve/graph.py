@@ -66,7 +66,7 @@ class ResolvedGraph:
     root_atom_ids: frozenset[str]
     providers: tuple[ProviderWitness, ...]
     config_digest: str
-    version: str = "1.0.0"
+    version: str = "1.0.1"
 
     def __post_init__(self) -> None:
         for name in ("atoms", "owners", "publications"):
@@ -306,7 +306,7 @@ class _Assembly:
         if not self.node_owners(sources[0]) and edge.source not in self.known_atoms:
             raise CompileError("INVALID_GRAPH")
         for source in sources:
-            if not self.node_owners(source):
+            if declaring not in self.node_owners(source):
                 continue
             for target in self._targets_for(source, targets, edge, declaring):
                 if not self._version_matches(target, edge):
@@ -396,6 +396,6 @@ def resolve_graph(admission: AdmissionResult, task: TaskContext) -> ResolvedGrap
         root_atom_ids=roots,
         providers=providers,
         config_digest=snapshot_digest(
-            {"version": "1.0.0", "profile": "CCS-2.1-m4-collective-interfaces-v1"}
+            {"version": "1.0.1", "profile": "CCS-2.1-m4-collective-interfaces-v1"}
         ),
     )
