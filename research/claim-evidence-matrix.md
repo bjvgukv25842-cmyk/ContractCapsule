@@ -36,6 +36,14 @@ require individually approved repairs. This is bounded engineering
 evidence, not M4 author approval or any empirical result; see
 `research/module-reports/M4.md` and its exact audit handoff.
 
+After the author's explicit R1/R2/R3 repair approval, candidate `bb1d56d`
+passes independent integrated technical reaudit on2026-09-08. All three
+findings are addressed;763 full tests retain745 prior nodes and add18 repair
+regressions. Exact old-method mutations reproduce4/3/6 failures. This advances
+M4 to the separate author exit gate, not beyond it. Details and preserved
+failure/reaudit evidence: `M4-2026-09-08-remediation.md`. This update supersedes
+the open-finding status of old candidates below without rewriting their history.
+
 ## Contribution Claims
 
 | ID | Claim boundary | System artifact | Formal case or experiment | Metric | Paper section | Evidence available through M2 | Evidence still missing | Human validation responsibility |
@@ -123,6 +131,19 @@ privacy require fixes. Original Git locator and offline-read findings have
 scoped PASS, not whole-system PASS. Additional diagnostics are counted separately
 from745 existing nodes and are not empirical results. Exact reports and minimal
 repair scopes are in `M4-2026-09-08-independent-exit-audit.md`.
+
+### Approved Repair Reaudit Update (2026-09-08)
+
+Exactbb1d56d now has independent technical PASS after the author-approved
+R1/R2/R3 repairs. C2 gains verified source-owner admission, fixed allocation
+and safe invalidated failure projections; RQ1/RQ2 gain corrected engineering
+instrumentation, not empirical results. Public token zeros accompanying
+AUTHORIZATION_SNAPSHOT_INVALIDATED represent redacted detail, not free work;
+those entries must not be treated as actual zero-cost research observations.
+All previous tests/core schemas/protocol/dependency identities remain, with
+runtime graph1.0.1 and compiler0.1.2 stamps distinguishing corrected replay.
+Author M4 exit, M5-M6 vertical slice, human benchmark truth and formal empirical
+results remain outstanding.
 
 ## M3 Engineering Evidence Pointer
 

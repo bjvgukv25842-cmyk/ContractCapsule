@@ -1128,3 +1128,65 @@
 - M4 remains before author exit; formal progress4/12. G1/G2/G3 dates are past,
   no all-gates approval or schedule change is inferred. M5 and formal
   experiments have not started. Next action: obtain approval for named repair IDs.
+
+## M4-011 - Author Approves R1, R2 and R3; Implementation Checkpoint
+
+- Date recorded: 2026-09-08. The author's direct instruction approved M4-R1,
+  M4-R2 and M4-R3 and requested repair work. This approval predates the code
+  changes; this durable record is appended after their technical commits.
+  It is not M4 exit approval, M5 authorization or approval for unrelated findings.
+- Isolated branch/worktree: codex/m4-exit-remediation, from exact4458527.
+  This retains the completed audit governance; source/tests/schemas/dependencies
+  are byte-identical to audited2ce1653 at the branch point. Original M4 worktree
+  remains at4458527. No merge/push or frozen baseline change.
+- R1 commit19689c8: exact admitted declaring-owner guard and six regressions;
+  RED4failed/2passed, GREEN6 and combined64; cumulative751. Graph stamp1.0.1.
+  Original reviewer independently marked scoped R1 PASS after64 tests and
+  old-guard mutation (4expected failures), then fresh6pass. This is not full exit.
+- R2 commite31a894: stable compression-class assembly, class-internal rank
+  preservation and four regressions; genuine corrected RED3failed/1passed,
+  GREEN4/combined59; cumulative755. Compiler stamp advanced to0.1.1.
+  Initial P4 TTL and same-class budget setup failures are retained and are not
+  counted as three additional implementation defects. Only test fixtures changed.
+- R3 commitbb1d56d: reauthorize failed transactions and withhold invalidated
+  public identity projection; eight more cases including partial revocation,
+  malformed snapshots, rank/budget/conflict failure combinations and positive
+  unchanged authorization. RED6failed/6passed across the combined repair file,
+  GREEN12/combined67; cumulative763. Compiler output/stamp now0.1.2.
+- Withheld manifests retain only safe caller metadata, stable compiler stamp,
+  a count of invalidated prior capsule snapshot entries and zeroed/redacted
+  token detail. That count is not the number individually revoked; token zero
+  is not a measurement of real work. Internal transaction state is not deleted.
+  Ordinary still-authorized budget failures keep real attempts/counts.
+- Only graph.py, session.py, manifest.py and two new regression files change.
+  Public call shapes and every existing schema byte remain unchanged; explicit
+  output service versions change to distinguish corrected replay semantics.
+- Exactbb1d56d is under independent combined reaudit. Local763passes and static
+  checks are not independent PASS. Remaining final evidence and governance
+  results will be appended. M4 author exit remains pending; M5 unstarted.
+
+## M4-012 - R1-R3 Combined Technical Reaudit Passes
+
+- Date: 2026-09-08. Independent integrated repair/exit reviewer
+  m4_exit_independent_audit gives PASS(technical) for exactbb1d56daecbc31240b5ea1371378c50e63dd9c4b.
+  All three authorized findings are addressed; no unresolved issue was found
+  in their scope and reviewed compiler interactions. Old failed audit reports
+  remain unmodified evidence for their old targets.
+- Independent full763(33.03s),frozen235(16.70s),formal30; all745 old nodes plus18
+  new cases; Mypy72; actual72/72 scanning; Ruff/complexity ordinary/no-ignore;
+  offline46-package lock, all9 schemas, build and wheel resource checks PASS.
+- Exact old R1/R2/R3 methods restored in disposable processes produce4/3/6
+  genuine behavioral assertion failures. Original two compiler diagnostics
+  fail on4458527 and pass onbb1d56d. Four extra interactions cover replay-time
+  revocation, raw reauthorization errors, truthful authorized P1 budgets and
+  internal transaction preservation. These are not formal research experiments.
+- Controller final763(33.14s),frozen235(16.69s),formal30 and artifact checks
+  agree; they are recorded separately, not used as independent approval.
+- Archive: M4-2026-09-08-remediation-evidence.tar.gz,80files, SHA256
+  20e6cb48077c76dc475d6a861f6382ac4f47089ad7fc43b5e16251d447be714b.
+  Reports are copied byte-for-byte; failure logs are losslessly retained. No
+  source copy, cache, fixture private key or generated database is exported.
+- Only final governance documents/ledger/evidence follow the technical target.
+  The original M4 and root worktrees remain untouched. No merge/push.
+- Stop at the separate author M4 exit gate. R1/R2/R3 authorization and technical
+  PASS do not advance formal progress beyond4/12. No M5 or schedule/G1-G3 waiver.
