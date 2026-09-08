@@ -401,12 +401,47 @@ class Compilation:
 
     def failure(self, code: str) -> CompiledView:
         safe = code if code in _SAFE_CODES else "COMPILATION_FAILED"
-        return self._result(ValidationReport(valid=False, blockers=(safe,)))
+        redact = (
+            safe
+            in {
+                "INVALID_POLICY_SNAPSHOT",
+                "POLICY_SNAPSHOT_CHANGED",
+                "EVIDENCE_UNAUTHORIZED",
+            }
+            or not self._admission_is_current()
+        )
+        return self._result(
+            ValidationReport(valid=False, blockers=(safe,)), redact=redact
+        )
 
-    def _result(self, report: ValidationReport) -> CompiledView:
+    def _admission_is_current(self) -> bool:
+        if self.admission is None:
+            return True
+        request = self.request
+        if request is None:
+            return False
+        try:
+            if (
+                snapshot_digest(compile_request_projection(request))
+                != self.metadata["request_digest"]
+            ):
+                return False
+            current = EligibilityResolver(
+                self.compiler.registry,
+                self.compiler.authorizer,
+                self.compiler.freshness,
+                request.as_of,
+            ).resolve(request.capsules, request.task, request.principal)
+            return current == self.admission
+        except Exception:  # noqa: BLE001 - failed reauthorization cannot export old identities.
+            return False
+
+    def _result(
+        self, report: ValidationReport, *, redact: bool = False
+    ) -> CompiledView:
         from contractcapsule.compile.manifest import build_manifest
 
-        manifest = build_manifest(self, report)
+        manifest = build_manifest(self, report, redact=redact)
         handles = {
             source.handle.handle_id: source.handle
             for atom_id in self.selected

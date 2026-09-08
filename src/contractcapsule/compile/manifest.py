@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from contractcapsule.models.view import (
     DecisionRecord,
     ServiceStamp,
+    TokenAccounting,
     ValidationReport,
     ViewManifest,
 )
@@ -15,10 +16,12 @@ from contractcapsule.resolve.policies import snapshot_digest
 if TYPE_CHECKING:
     from contractcapsule.compile.session import Compilation
 
-_COMPILER_VERSION = "0.1.1"
+_COMPILER_VERSION = "0.1.2"
 
 
-def build_manifest(session: Compilation, report: ValidationReport) -> ViewManifest:
+def build_manifest(
+    session: Compilation, report: ValidationReport, *, redact: bool = False
+) -> ViewManifest:
     admission, graph = session.admission, session.graph
     empty_digest = "sha256:" + "0" * 64
     metadata = {
@@ -33,6 +36,8 @@ def build_manifest(session: Compilation, report: ValidationReport) -> ViewManife
         "renderer_version": "invalid-request",
     }
     metadata.update(session.metadata)
+    if redact:
+        return _withheld_manifest(session, report, metadata)
     participating = (
         {}
         if graph is None
@@ -57,18 +62,7 @@ def build_manifest(session: Compilation, report: ValidationReport) -> ViewManife
         )
     )
     services = list(session.services)
-    services.append(
-        ServiceStamp(
-            name="compiler",
-            version=_COMPILER_VERSION,
-            config_digest=snapshot_digest(
-                {
-                    "profile": "CCS-2.1-m4-collective-interfaces-v1",
-                    "version": _COMPILER_VERSION,
-                }
-            ),
-        )
-    )
+    services.append(_compiler_stamp())
     if graph is not None:
         services.append(
             ServiceStamp(
@@ -124,6 +118,46 @@ def build_manifest(session: Compilation, report: ValidationReport) -> ViewManife
             "services": tuple(services),
             "expanded_evidence": session.expanded if report.valid else (),
             "tokens": session.tokens,
+            "validation": report,
+        }
+    )
+
+
+def _compiler_stamp() -> ServiceStamp:
+    return ServiceStamp(
+        name="compiler",
+        version=_COMPILER_VERSION,
+        config_digest=snapshot_digest(
+            {
+                "profile": "CCS-2.1-m4-collective-interfaces-v1",
+                "version": _COMPILER_VERSION,
+            }
+        ),
+    )
+
+
+def _withheld_manifest(
+    session: Compilation, report: ValidationReport, metadata: dict[str, str]
+) -> ViewManifest:
+    # Retain transaction evidence internally, never export an invalidated snapshot.
+    return ViewManifest.model_validate(
+        {
+            **metadata,
+            "compiler_version": _COMPILER_VERSION,
+            "request_digest": "sha256:" + "0" * 64,
+            "permission_digest": "sha256:" + "0" * 64,
+            "services": (_compiler_stamp(),),
+            "rejected_counts": {
+                "AUTHORIZATION_SNAPSHOT_INVALIDATED": len(session.admission.items)
+                if session.admission is not None
+                else 0,
+            },
+            "tokens": TokenAccounting(
+                total=0,
+                available=session.tokens.available,
+                sections={},
+                boundary_adjustment=0,
+            ),
             "validation": report,
         }
     )
