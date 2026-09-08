@@ -15,6 +15,8 @@ from contractcapsule.resolve.policies import snapshot_digest
 if TYPE_CHECKING:
     from contractcapsule.compile.session import Compilation
 
+_COMPILER_VERSION = "0.1.1"
+
 
 def build_manifest(session: Compilation, report: ValidationReport) -> ViewManifest:
     admission, graph = session.admission, session.graph
@@ -58,9 +60,12 @@ def build_manifest(session: Compilation, report: ValidationReport) -> ViewManife
     services.append(
         ServiceStamp(
             name="compiler",
-            version="0.1.0",
+            version=_COMPILER_VERSION,
             config_digest=snapshot_digest(
-                {"profile": "CCS-2.1-m4-collective-interfaces-v1", "version": "0.1.0"}
+                {
+                    "profile": "CCS-2.1-m4-collective-interfaces-v1",
+                    "version": _COMPILER_VERSION,
+                }
             ),
         )
     )
@@ -104,6 +109,7 @@ def build_manifest(session: Compilation, report: ValidationReport) -> ViewManife
     return ViewManifest.model_validate(
         {
             **metadata,
+            "compiler_version": _COMPILER_VERSION,
             "permission_digest": admission.permission_digest
             if admission
             else empty_digest,

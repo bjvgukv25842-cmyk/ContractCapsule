@@ -314,7 +314,8 @@ class Compilation:
             "TASK_REQUIRED",
             "P1_OVERFLOW",
         )
-        for item in self.ranked:
+        # Stable sorting preserves the ranker's order within each fixed class.
+        for item in sorted(self.ranked, key=lambda item: item.atom.compression_class):
             atom_id = item.atom.atom_id
             if atom_id in self.selected or not item.matched:
                 continue
