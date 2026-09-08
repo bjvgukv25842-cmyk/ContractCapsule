@@ -1098,3 +1098,33 @@
 - Update C2/RQ1/RQ2/C5 engineering evidence only. Formal completion remains
   M0-M3 (4/12), not5/12. Independent M4 audit and author exit still required;
   G1/G2 are missed, G3 unpassed, no schedule waiver, no M5 or formal experiments.
+
+## M4-010 - Independent Exit Audit Returns Request Changes
+
+- Date: 2026-09-08. Technical2ce1653 and governancecd6cfcf were unchanged and
+  clean at audit start/end. Both frozen hashes match. Native internal dispatch
+  now works; the prior dispatch-unavailable condition is not the current blocker.
+- Independent service rereviewer `m4_services_backlog_review`:9 persistent
+  regressions pass; Git locator binding and offline reads scoped PASS. The
+  original foreign-source examples are fixed but a denied declaring-owner
+  occurrence of a shared atom still imports an edge. Graph finding stays open.
+- Fresh independent reviewer `m4_exit_independent_audit`:235 frozen/745 full/
+  30 formal pass; full static/type/complexity/schema/build/lock gates pass;
+  actual70/70 inventory and original339 retention verified. Ten real fault
+  mutations are caught. Final11 additional diagnostics have2 failures/9 passes.
+- New compiler findings: fixed compression-class budget precedence depends on
+  replacement-ranker ordering, and late revocation leaves denied IDs in the
+  public failure manifest even though content and handles are empty.
+- Stable pending repair IDs: M4-R1 owner admission(P1), M4-R2 fixed allocation
+  order(P2, reviewer IA-M4-01), M4-R3 revoked failure projection(P2, IA-M4-02).
+  All require itemized author approval. No implementation/repair branch is
+  created. Public models, dependency pins and core/frozen identities stay fixed.
+- One reviewer turn hit429 and resumed the same artifacts without overwriting
+  results. It completed; all execution sessions ended. Independent reports and
+  exact diagnostic/log evidence are preserved under M4-2026-09-08 reports.
+- Controller confirmations and artifact checks are separately labeled and not
+  treated as independent approval. Audit outcome is REQUEST CHANGES, not a
+  waiver based on745 passing tests. Only governance files change after audit.
+- M4 remains before author exit; formal progress4/12. G1/G2/G3 dates are past,
+  no all-gates approval or schedule change is inferred. M5 and formal
+  experiments have not started. Next action: obtain approval for named repair IDs.

@@ -29,7 +29,10 @@ standalone B-zone manifest and locked replay. Clean-archive controller tests:
 745 total (all339 original IDs plus406 new),235 frozen M4,30 formal; lint/type/
 complexity/lock/build and six targeted mutation checks pass. Three independent
 service findings were repaired at `ed7feae`; repair rereview and the integrated
-compiler's independent exit audit remain pending. This is bounded engineering
+compiler's independent exit audit subsequently completed on2026-09-08 with
+REQUEST CHANGES. Git binding/offline repairs pass scoped review; a residual
+declaring-owner admission issue and two compiler allocation/privacy issues
+require individually approved repairs. This is bounded engineering
 evidence, not M4 author approval or any empirical result; see
 `research/module-reports/M4.md` and its exact audit handoff.
 
@@ -108,6 +111,18 @@ support for the contribution claims.
 The original service audit returned REQUEST CHANGES, not PASS. Local repairs
 and passing tests do not rewrite that verdict. All M4 material remains an
 author-unapproved exit candidate; no M5 or formal experiment has started.
+
+### Independent Exit Audit Update (2026-09-08)
+
+Two independent reviewers completed the scoped service rereview and full exit
+audit at technical2ce1653/governancecd6cfcf. Independent235/745/30 regression
+checks,10 targeted mutations, type/lint/complexity/lock/schema/build and governance
+checks are now available. They do not close M4: M4-R1 graph owner admission,
+M4-R2 replaceable-ranker allocation precedence and M4-R3 late-revocation metadata
+privacy require fixes. Original Git locator and offline-read findings have
+scoped PASS, not whole-system PASS. Additional diagnostics are counted separately
+from745 existing nodes and are not empirical results. Exact reports and minimal
+repair scopes are in `M4-2026-09-08-independent-exit-audit.md`.
 
 ## M3 Engineering Evidence Pointer
 
