@@ -1,11 +1,22 @@
 # Claim-Evidence Matrix
 
+M5 proposal status: independent initial review of198616e returned REQUEST
+CHANGES; revised2842a13 is READY FOR AUTHOR APPROVAL after four clarifications.
+ADR-0005 remains PROPOSED, so no M5 runtime implementation or behavior result
+is claimed. See `research/module-reports/M5.md` for the exact author gate.
+
 Latest gate update (recorded2026-09-09): the author approved M4's exit at
 technicalbb1d56d/governance1aeeb11 and authorized M5 startup. Original independent
 technical PASS and fresh763-test regression remain engineering evidence only.
 M5 starts with its separate proposed ADR-0005 review/author approval gate;
 validation, behavioral twin runs, active pointer and rollback are not yet
 implemented. Earlier pending-M4 language is retained as historical context.
+
+M5 preparation now supplies an isolated approval baseline, fresh763 inherited
+regressions, a proposed signed execution/atomic replacement ADR and a bounded
+Docker profile feasibility check. None is M5 implementation or a measured
+behavioral result. ADR-0005 author approval remains required before semantic
+implementation; see `research/module-reports/M5.md`.
 
 Status: M1 analysis protocol frozen before formal experiments and G0
 author-approved with bounded scope on 2026-08-02. M2 supplies engineering

@@ -1211,3 +1211,45 @@
   worktree. No merge/push and no source/test/schema/dependency edits here.
 - G1/G2/G3 original dates are past and their gates remain unsatisfied; retain
   RQ3 and research integrity rather than backdating passes or weakening tests.
+
+## M5-001 - Isolated Startup and Proposed Execution Profile
+
+- Date: 2026-09-09. Branch codex/m5-validation-swap starts at exact M4
+  approval3bcdbc638de4c10e30fc7dee666e2517450bf1f5. M4 is author-approved;
+  M5 startup is authorized with the separate ADR-0005 approval gate intact.
+- Fresh new-worktree baseline763passed37.83s; locked offline environment46
+  packages. No production/test/schema/dependency file is changed in this phase.
+- Proposal198616e contains ADR-0005 and the derived seven-task M5 plan. It
+  describes signed clause/test bindings, execution authority separate from
+  publication, trusted isolated observations, independent view validation,
+  local action/pointer/receipt transactions and guarded rollback. It is not
+  adopted semantics until the exact reviewed text receives author approval.
+- Docker29.5.2 and local Linux/arm64 image090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
+  were inspected without a pull. A no-network/non-root/read-only/resources
+  probe passes; initial interface-name assertions failed because the kernel
+  exposes disabled tunnel templates. Actual active-interface/routes and Docker
+  configuration were checked instead; original isolation flags remain fixed.
+- Only disposable preflight containers were removed, with no persistent user
+  data. No candidate test program, actual Agent or M5 behavior was executed.
+- Independent document review is requested; full implementation remains behind
+  ADR approval. Formal progress5/12; no G1-G3 waiver, M6 or formal experiment.
+
+## M5-002 - Proposed ADR Review Ready for Author Decision
+
+- Date: 2026-09-09. Independent review of198616e requested four clarifications:
+  unconditional high/critical activation approval, staged preconditions,
+  subject/checker Docker artifact/result-channel separation, and exact complete
+  differential snapshots/operands with one pair-level result.
+- Revised exact2842a13ddc3e1bb29479017a50e4eae5ad6f239b addresses all four.
+  The same reviewer returns READY FOR AUTHOR APPROVAL with no new blocking
+  contradiction in the revised scope. No runtime code or schema was changed.
+- ADR SHA256: da92462f397a82a6d5c2a2320b6ab98280f5af69edc538ed09ac6533e3115687.
+  Plan SHA256: afaf6ebd8d8edc2c16afcff222c5389111e984e3cc22749def15e27deee26b83.
+- Original report SHA256:834c7e7ad3572b4c6a7ea1838270042c7b322dfa25f36c74a631c7b1c8f42e89;
+  rereview SHA256:6d2b19b9b10499872a37542729eaa6742ebfaf6080f48b2c18091203cde180aa.
+  Reports are preserved byte-for-byte. Reviewer ran no tests or Docker;
+  controller's inherited763-test results are not represented as review results.
+- Post-proposal controller regression763PASS33.20s; Ruff/Mypy72/lock/hash checks
+  pass. No M5 feature/behavioral or empirical result is claimed.
+- ADR-0005 remains PROPOSED. Stop for exact-text author approval before M5-1
+  semantics. No M5 exit, M6, experiment, merge/push or schedule waiver.
