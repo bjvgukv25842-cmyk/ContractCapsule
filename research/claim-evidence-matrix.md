@@ -2,8 +2,9 @@
 
 M5 proposal status: independent initial review of198616e returned REQUEST
 CHANGES; revised2842a13 is READY FOR AUTHOR APPROVAL after four clarifications.
-ADR-0005 remains PROPOSED, so no M5 runtime implementation or behavior result
-is claimed. See `research/module-reports/M5.md` for the exact author gate.
+The author approved the exact ADR-0005 text on 2026-09-09; M5-1 is authorized,
+but no M5 runtime implementation or behavior result is claimed yet. See
+`research/module-reports/M5.md` for the execution boundary.
 
 Latest gate update (recorded2026-09-09): the author approved M4's exit at
 technicalbb1d56d/governance1aeeb11 and authorized M5 startup. Original independent

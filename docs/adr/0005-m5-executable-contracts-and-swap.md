@@ -2,7 +2,11 @@
 
 ## Status and Authority
 
-**PROPOSED, not author-approved.** Date: 2026-09-09. Module: M5.
+**ACCEPTED BY THE AUTHOR ON 2026-09-09.** Date: 2026-09-09. Module: M5.
+
+Approved exact-text proposal commit: `2842a13ddc3e1bb29479017a50e4eae5ad6f239b`.
+The acceptance metadata is recorded in a successor governance commit; the
+decision text and implementation profile below are unchanged.
 
 The author approved M4 exit and M5 startup, selected signed-core extensions and
 Docker isolation, and requested execution of the M5 plan. The plan explicitly
@@ -368,6 +372,7 @@ followed by full lint/type/complexity/scanner-inventory/lock/schema/hash checks
 and an independent read-only implementation audit. Report engineering evidence
 for C1/C2/C5 and prospective RQ3, not formal benchmark results.
 
-This ADR needs independent document review and explicit author approval of its
-exact committed text before M5 semantic implementation. Neither document review
-nor module startup approves M5 exit, M6, a revised schedule or formal experiments.
+The author approved this exact text after the independent document review at
+`6d2b19b9b10499872a37542729eaa6742ebfaf6080f48b2c18091203cde180aa`.
+This accepts the M5 implementation profile, but does not approve M5 exit, M6,
+a revised schedule or formal experiments.
