@@ -45,6 +45,8 @@ parse/validate operation for x-m5-execution rather than altering M2 acceptance.
   fixtures for wrong clause hash/index/role, duplicate IDs, missing mappings,
   wrong artifact kind/hash, ambiguous test ID, missing bytes, incompatible old
   interfaces, wrong old ref and absent execution approval; observe actual RED.
+- [ ] Reject role/phase mismatches, wrong expectation variants, undeclared
+  helpers/probes and overlapping executor/checker-only artifact subsets.
 - [ ] Implement profile parsing, exact old ref/interface compatibility, complete
   check mapping and local artifact resolution as specified in ADR-0005.
 - [ ] Add post-publication execution approvals with separate trusted issuance,
@@ -95,8 +97,11 @@ records bound to the exact approved execution profile.
 - [ ] Implement per-check observations and explicit old/new expectations;
   report three numerators/denominators independently. Verify old-state setup
   without requiring it to satisfy the new target before replacement.
-- [ ] Compare complete output snapshots, including untracked files and modes,
-  against allowed/forbidden anchored paths; keep behavioral spillover distinct.
+- [ ] Bind pre/post/pair records to their actual snapshot inputs. Run relational
+  checks only after both sides exist, with one pair-level expected observation.
+- [ ] Compare complete S0->old and S0->new trees for scope enforcement; retain
+  old->new relational deltas separately. Test identical outside-scope edits,
+  deletion, untracked creation, mode-only change and swapped pair operands.
 - [ ] Reject mismatched task/source commit/image/test/executor/budget/repetition
   binding; retain every valid unfavorable result and unstable repeat group.
 - [ ] Test forged result/receipt inputs and counter mutation, review and commit.
@@ -117,11 +122,17 @@ program changes behavior only when supplied a different compiled view.
   and then report M5's exit passed when Docker is unavailable.
 - [ ] Implement image/platform/profile locking, fixed argv, no pull/network,
   minimum mounts/privileges and resource/output limits. Enforce all ceilings.
+- [ ] Execute both precondition sets on initial S0 before either executor starts.
+  A failing precondition prevents startup even if the executor could repair it.
+  Run static/final-state checks after termination and pair checks after both
+  states exist; bind exact phases/snapshots into authoritative result records.
 - [ ] Stop and verify owned containers before snapshot/checker handoff. Test
   timeout, output floods, process residue, unsafe file types and attempted
   cross-run/checker writes without contacting real external systems.
-- [ ] Observe check results through trusted separate workers; do not trust
-  task stdout as a verdict or pass expected labels to the task executor.
+- [ ] Run every untrusted subject probe in its own restricted container, with
+  only its closed declared artifacts and subject inputs. Checkers alone own
+  result channels. Test checker-sentinel reads, undeclared helper access and
+  attempted inherited-result-channel forgery as well as cross-run writes.
 - [ ] One pair for low/medium, three predeclared pairs for high/critical;
   mixed results block. Run real fixture/mutation tests, review and commit.
 
@@ -167,7 +178,10 @@ rollback(receipt). CapsuleRef alone cannot choose reports or confer authority.
 - [ ] Restore only from a valid applied receipt and current matching generation,
   with old evidence/current permissions and a new safe boundary. Stale/foreign
   receipts cannot undo later activations; repeated rollback is idempotent.
-- [ ] Require genuine irreversible-action control evidence and any risk approval;
+- [ ] Require a distinct activation-subject approval when effective risk is
+  high/critical OR approval_required is true. Test high task risk with low
+  contract/false flag, high contract/false flag, execution-only approval and
+  transaction-time revocation. Irreversible-action controls are separate;
   never execute actual irreversible external effects in the reference fixture.
 - [ ] Run behavior/transaction fault injection, full regressions, review, commit.
 

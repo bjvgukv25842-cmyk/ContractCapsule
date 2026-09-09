@@ -50,7 +50,7 @@ The extension has these required fields:
 | replaces_ref | Old capsule ID, exact release version and digest |
 | accepts_interfaces | Explicit unique old interfaces accepted by the new contract |
 | checks | Ordered CheckBinding records covering all required clauses/commands |
-| executor | Locked reference-executor test ID and fixed argument array |
+| executor | Locked reference-executor test ID, explicit artifact subset and fixed argument array |
 | runner | Image content ID/digest, platform, profile version and resource/output limits |
 | repetitions | Exact paired repeat count for the declared effective risk |
 
@@ -59,12 +59,23 @@ self-referential. The external post-publication approval binds the final new
 digest. `replaces` must equal the old `capsule_id@version`, `replaces_ref` must
 match Registry, and `rollback.pointer` must name the same old version.
 
-A CheckBinding contains check_id, role, clause_path, clause_sha256, test_id,
-argv, old_expected and new_expected. role is precondition, static, behavioral, target,
-invariant, spillover or differential. clause_path selects an exact existing
+A CheckBinding contains check_id, role, phase, clause_path, clause_sha256,
+test_id, artifact_ids, argv and subject_probes, plus phase-specific expectations. role is
+precondition, static, behavioral, target, invariant, spillover or differential.
+phase is pre, post or pair. Pre/post bindings require old_expected and
+new_expected booleans and forbid pair_expected; pair bindings require only
+pair_expected=true and forbid old_expected/new_expected. clause_path selects an exact existing
 array entry: preconditions/i, target_effects/i, protected_invariants/i,
 forbidden_spillover/i, or verification/{static,behavioral,differential}/i.
 clause_sha256 hashes that entry's exact UTF-8 text, without normalization.
+
+subject_probes is an explicit ordered array (possibly empty) of probe_id,
+test_id, artifact_ids, argv and input_state. input_state is initial/current
+for pre/post checks and initial/old_final/new_final for pair checks; current
+means S0 before execution and the corresponding final tree afterward. The host
+runs only these declared probes before their checker, binds each observation
+to the probe and snapshot, and supplies read-only observations to that checker.
+Checkers cannot request arbitrary new commands or mounts at runtime.
 
 Every core clause and listed verification command must have exactly one binding;
 there are no silent skips or extra unmapped checks. check_id and clause_path
@@ -78,9 +89,12 @@ Role matches the selected collection: preconditions use precondition, the
 three verification collections use static/behavioral/differential respectively,
 and effect/invariant/spillover collections use target/invariant/spillover.
 Static and precondition programs reference static TestDefinitions; all other
-roles and the reference executor reference behavioral TestDefinitions. Guard
-roles precondition/static/behavioral/differential require true in both states;
-their results gate execution but do not enter TER/PIP/BSR denominators.
+roles and the reference executor reference behavioral TestDefinitions.
+Precondition is phase pre; static/behavioral/target/invariant/spillover are
+phase post; differential is phase pair. Precondition/static/behavioral guards
+require true in both states; differential has one true paired expectation.
+Preconditions gate executor startup; post/pair checks gate preparation and
+activation. Guard roles never enter TER/PIP/BSR denominators.
 
 Target, invariant and spillover collections are nonempty for automatic M5
 replacement. A legacy capsule lacking this profile or an executable check set
@@ -136,18 +150,56 @@ executor cannot receive old/new labels, expected outcomes, protected checker
 programs, approval credentials or another run's outputs. This ensures the
 fixture demonstrates a context-caused change, not a label-conditioned mock.
 
-After each executor terminates and no processes retain write access, snapshot
-its regular-file output into a separate immutable observation tree. Trusted
-check programs run separately with those observations read-only. They must not
-import/eval the submitted code into the trusted evaluator interpreter or accept
-task stdout as a passed-check record. Behavioral probes run in separate subject
-processes/containers; their bytes/exit codes are observations assessed by the
-approved checker, not authority to publish a verdict.
+Use these stages for repetition i, with snapshot digests authenticated by the
+host runner. S0 is the complete verified initial repository tree at the locked
+commit, not an output directory or a Git-status filtered subset.
+
+1. Verify execution approval, artifacts and old/new views; create identical
+   complete writable subject copies of S0. Before EITHER executor starts, run
+   both states' precondition checks against S0 and their locked view. Any failed,
+   missing or malformed precondition prevents both executors from starting.
+2. Run each subject executor in its own restricted container. Preconditions
+   cannot be repaired by a task that should never have started.
+3. After verified termination of all writers, snapshot each COMPLETE resulting
+   subject tree as S_old[i] and S_new[i]. A missing source file is a deletion,
+   not an unspecified unchanged file. Run static and other post checks against
+   S0 plus the corresponding final state and its view. Static here means
+   final-state verification; initial-source tests must be bound as preconditions.
+4. Once both sides and their valid post records exist, run each differential
+   check once on (S0,S_old[i],S_new[i]). Its one paired observation binds both
+   run IDs, both final snapshot digests, S0 digest and repetition. Compare it
+   to pair_expected=true; never fabricate two per-state differential passes.
+
+Trusted checker containers must not import/eval submitted repository code into
+their interpreter or accept task stdout as a passed-check record. EVERY
+untrusted behavioral subject probe runs in a separate restricted container,
+not merely a sibling process under the checker's UID. The host orchestrates
+probe execution and passes captured observations to the trusted checker.
+Probe stdout/exit is data; only the checker owns its observation/result channel.
+
+Each executor/check binding names a closed, digest-locked artifact_ids subset
+of TestsIntegrity, containing its entry point and every helper. Required probe
+programs use an explicitly locked subject-only subset; undeclared imports or
+helper needs block rather than broadening a mount. Executor/subject subsets
+are disjoint from checker-only programs/helpers/expected-data artifacts; sharing
+a mixed executor/checker entry point is rejected. Never mount the entire mixed
+TestsIntegrity package as a convenience.
+
+Per-stage visible mounts: executor gets only its program subset, safe task
+input, its view and its writable S0 copy; subject probes get only their subset
+and designated subject snapshot/observation inputs. Neither receives checker
+artifacts, another run, expected outcomes, credentials or a checker output FD.
+Pre checkers get their checker subset plus read-only S0/view; post checkers get
+that subset and read-only S0/final-state/view; pair checkers get their subset
+and read-only S0/old/new states. All checker result streams are separate host
+captures bound to their exact trusted container ID/phase, not inherited subject
+descriptors. Controller logs/keys/tickets live outside subject trees entirely.
 
 Each checker emits exactly one strict JSON observation with its expected
 check_id and a boolean observation; duplicates, extra IDs, missing/malformed
 output, abnormal exit, skip, timeout or output limit failure block. The host
-compares this observation to the signed old_expected/new_expected value.
+compares this observation to the signed phase-appropriate expectation. Each
+authoritative record includes phase and exact input snapshot digests.
 False target observation is a valid unfavorable outcome, not a crash to retry.
 
 For target checks, new_expected is true; for invariants both expectations are
@@ -162,11 +214,19 @@ triggered spillover/count as BSR, with individual check records. Activation
 requires TER=1, PIP=1, BSR=0, complete precondition/static/differential checks,
 and stable repetitions. No combined score can compensate for a failed check.
 
-File-system differential checks independently compare additions, deletions,
-contents and executable mode, including untracked output files. Reuse M4's
-anchored POSIX glob semantics for allowed_scope/forbidden_spillover. Any change
-outside allowed scope or inside forbidden scope blocks; an empty allowed scope
-permits no changed file. These checks supplement, not replace, behavioral BSR.
+Independently compute all three full-tree deltas: S0->S_old[i], S0->S_new[i]
+and S_old[i]->S_new[i]. BOTH S0-relative deltas enforce allowed/forbidden scope;
+identical out-of-scope edits in both runs therefore still block even if the
+old/new delta is empty. The old/new delta is retained for relational checks
+and reporting, not used as a substitute for source-relative scope enforcement.
+Compare path entry types, additions, deletions, contents and permission modes,
+including subject-created/untracked files and directory-mode changes. Do not
+silently exclude subject artifacts. Reject incomplete snapshots and unsupported
+file types; keep host bookkeeping outside them. Reuse M4's anchored POSIX glob
+semantics: any changed path outside allowed scope or inside forbidden scope
+blocks; an empty allowed scope permits no change. These checks supplement,
+not replace, behavioral BSR. Author approval of this ADR accepts this explicit
+conservative interpretation rather than leaving differential operands implicit.
 
 ## Decision 4: Locked Docker Research Profile
 
@@ -239,7 +299,7 @@ process/container termination evidence and an explicit reconciliation event.
 
 PreparedReplacement records bind old/new ActiveBinding, request/principal,
 validated current views, reports, run IDs, execution approval, activation
-approval when required and expiry. Expensive Docker/check work happens outside
+approval under the predicate below and expiry. Expensive Docker/check work happens outside
 the commit transaction. activate(candidate,boundary) uses a session-scoped
 controller with an explicit prepared-record ID bound by composition; the
 candidate ref alone cannot choose the latest convenient report.
@@ -269,9 +329,17 @@ to the receipt before restoring the old binding with a new generation. A stale,
 foreign, forged or never-applied receipt cannot overwrite subsequent state.
 Repeat the same rollback operation idempotently; do not apply it twice.
 
+ActivationApproval is mandatory iff effective_risk is high/critical OR
+activation.approval_required is true. Task-high/contract-low and high/false-flag
+cases cannot bypass it. ExecutionApproval is a different subject and never
+satisfies activation approval. Bind the activation subject to the exact
+prepared evidence/request/scope and expected old generation, excluding the
+approval's own envelope to avoid self-reference. Recheck its validity, expiry
+and revocation inside the commit transaction.
+
 Context rollback restores only future context. Irreversible-action controls
-require bound trusted preflight, approval or a compensation plan; high risk
-also obeys approval_required. The M5 fixture performs no actual email, payment,
+separately require bound trusted preflight, approval or a compensation plan;
+they do not waive the high-risk ActivationApproval predicate. The M5 fixture performs no actual email, payment,
 deployment or irreversible deletion, and never claims external-effect rollback.
 
 ## Alternatives and Consequences
