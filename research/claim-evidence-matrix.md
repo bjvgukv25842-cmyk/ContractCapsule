@@ -1,5 +1,12 @@
 # Claim-Evidence Matrix
 
+Latest gate update (recorded2026-09-09): the author approved M4's exit at
+technicalbb1d56d/governance1aeeb11 and authorized M5 startup. Original independent
+technical PASS and fresh763-test regression remain engineering evidence only.
+M5 starts with its separate proposed ADR-0005 review/author approval gate;
+validation, behavioral twin runs, active pointer and rollback are not yet
+implemented. Earlier pending-M4 language is retained as historical context.
+
 Status: M1 analysis protocol frozen before formal experiments and G0
 author-approved with bounded scope on 2026-08-02. M2 supplies engineering
 evidence for canonical models, package loading, CAS, and immutable Registry

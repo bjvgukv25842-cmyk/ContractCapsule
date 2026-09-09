@@ -1190,3 +1190,24 @@
   The original M4 and root worktrees remain untouched. No merge/push.
 - Stop at the separate author M4 exit gate. R1/R2/R3 authorization and technical
   PASS do not advance formal progress beyond4/12. No M5 or schedule/G1-G3 waiver.
+
+## M4-013 - Author Exit Approval and M5 Startup Authorization
+
+- Recorded: 2026-09-09. In the preceding planning turn the author explicitly
+  approved entering M5 after being told M4 required the separate exit decision;
+  the author now requests execution of that M5 plan. This closes M4's author
+  exit at technicalbb1d56daecbc31240b5ea1371378c50e63dd9c4b and governance
+  1aeeb116835fc4b9656dd81107a79e6a0afab19a. No new technical changes intervene.
+- Independent M4 technical PASS and exact evidence are retained. Fresh startup
+  regression on1aeeb11:763 passed in32.94s. Both frozen hashes still match.
+- Formal approved-module progress is now5/12 (M0-M4,41.7%). This approves
+  bounded engineering evidence only, not a benchmark result or submission claim.
+- The author selected signed-core x-* execution extensions and Docker isolation
+  for M5. The plan separately requires proposed ADR-0005 text to receive
+  independent review and author approval before semantic implementation.
+  M5 startup is not advance approval of that ADR, runtime execution approvals,
+  M5 exit, M6, revised study scope, or revised deadlines.
+- This governance-only commit precedes the new codex/m5-validation-swap
+  worktree. No merge/push and no source/test/schema/dependency edits here.
+- G1/G2/G3 original dates are past and their gates remain unsatisfied; retain
+  RQ3 and research integrity rather than backdating passes or weakening tests.
