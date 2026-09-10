@@ -1253,3 +1253,29 @@
   pass. No M5 feature/behavioral or empirical result is claimed.
 - ADR-0005 remains PROPOSED. Stop for exact-text author approval before M5-1
   semantics. No M5 exit, M6, experiment, merge/push or schedule waiver.
+
+## M5-003 - Accepted ADR and Task1 Recovery Record
+
+- Recorded2026-09-10. The author approved the exact reviewed ADR-0005 after
+  the readiness report and explicitly requested continued execution of M5.
+  Acceptance is committed at104e665f659879d3398a04cdb0425e446653b633;
+  the approved proposal is2842a13ddc3e1bb29479017a50e4eae5ad6f239b.
+  The acceptance metadata changed only status/approval paragraphs. Accepted
+  file digest:c4457f5da29903261ea7ce58c68e28c43cbdfb74eb55e70a8ff5c1d1617921a0.
+- The intended decision-log patch failed earlier, so this entry supplies the
+  missing durable decision link. The104e665 AI ledger row mistakenly put the
+  ADR file digest in its commit field and recorded an incorrect prompt hash.
+  The old row remains untouched; an append-only correction identifies it by
+  raw-row digest and supplies exact corrected fields. Its timestamp was a
+  controller-entered value, not verified run metadata.
+- The initial M5-1 worker produced only an unfinished test with fallback
+  missing-import values; repeated waiting did not produce a source implementation
+  or task report. It was interrupted, and m5_1_recovery now owns the bounded
+  task. The unfinished test is preserved in ignored task scratch before repair.
+  Missing imports/fixture faults are not behavioral security RED evidence.
+- Continue M5-1 with real publication/artifact-byte tests and the accepted
+  trusted execution boundary. Approval verification is reusable; operation
+  redemption/idempotency belongs to the later durable state owner, as required
+  by the accepted prepare/activate transaction semantics. No fake in-memory
+  once-only validation is a substitute for transaction-level replay protection.
+- No M5 feature is yet complete; all M6/experimental/module exit gates remain.

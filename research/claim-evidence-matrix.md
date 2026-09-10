@@ -1,5 +1,11 @@
 # Claim-Evidence Matrix
 
+Latest implementation checkpoint2026-09-10: M5-1 technicalbbf031d supplies
+executable-binding and approval-boundary engineering evidence (46 new cases,
+809 cumulative). Its independent task review remains pending. M5 validation,
+actual Docker twin execution, behavior scoring and active pointer/rollback
+are not yet delivered. No empirical claim or M6 work is implied.
+
 M5 proposal status: independent initial review of198616e returned REQUEST
 CHANGES; revised2842a13 is READY FOR AUTHOR APPROVAL after four clarifications.
 The author approved the exact ADR-0005 text on 2026-09-09; M5-1 is authorized,
