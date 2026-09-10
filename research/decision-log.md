@@ -1323,3 +1323,21 @@
   Task3 begins atf161910 to implement separate behavior/differential evaluation.
   Expected report kinds/subjects and fresh effect-time validation remain
   integration obligations. No Task3-7 outcome/M5 exit/M6 approval is implied.
+
+## M5-007 - Behavioral and Differential Task Implemented
+
+- Date2026-09-10. Task3 technical20cb819 adds host-authenticated run/check/pair
+  transport, separate TER/PIP/BSR observations and old/new expectations, source-
+  relative complete-tree scope deltas and exact repeated group verification.
+- Seventy-one new cases;928cumulative tests pass66.51s; Mypy90 and ordinary/
+  no-ignore Ruff/all4complexity checks pass. Counter/scope bypass mutants produce
+  actual assertion failures. Original RED/fixture errors remain in the report.
+- A provider429 interrupted the first Task3 turn; the same worker resumed
+  existing files without restarting, replacing adverse outcomes or duplicating
+  earlier completed tasks. Final technical worktree is clean at20cb819.
+- No Docker execution, actual external Agent run or activation was produced.
+  Task4 must establish trusted initial/view/approval context and actual capture
+  timing/isolation. Task5/6 own exact attempt selection/redemption and current
+  effect-time validation, not caller-selected favorable repeats.
+- Independent bounded Task3 review is now pending. M5 remains in progress;
+  no M6, formal experiment or schedule waiver.
