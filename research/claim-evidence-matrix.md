@@ -1,5 +1,11 @@
 # Claim-Evidence Matrix
 
+Latest2026-09-10: author-approved M5-3-R1 is fixed atf94412d and independently
+reviewed ADDRESSED/specPASS/qualityPASS. Task3's original open finding is closed
+for this repaired candidate; Tasks1-3 are reviewed engineering increments.
+Full938tests includes10new pair-identity regressions. Task4 Docker execution
+is starting; no actual twin-run/M5exit/empirical result is claimed yet.
+
 Current M5 gate2026-09-10: Tasks1/2 independently PASS; Task3 independent
 review REQUEST CHANGES for M5-3-R1 (cross-role container ID reuse within one
 pair).928passing implementation tests do not establish Task3 or M5 acceptance.

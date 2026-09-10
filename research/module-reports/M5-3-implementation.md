@@ -243,3 +243,69 @@ Current policy/source freshness remains their effect-time obligation.
 Original M5Aug22-24schedule is missed. No date/study/gate waiver is claimed.
 Independent review of the exact technical candidate is the next step.
 未开始下一模块（M6）；本子任务未执行M5-4及以后任务。
+
+## FIX ROUND 1 — Approved M5-3-R1
+
+Technical repair commit:f94412dc4dc80125cbc1ffa2e7b0e54a6c0aa017.
+
+Date2026-09-10. Resumed from5946530 after explicit itemized author approval;
+controller approval governancef0bea1b arrived during the fix. Original technical
+20cb819 and the report above remain unchanged historical evidence. Read the
+complete independent M5-3 review and M5-3-repair-request, latest decisions and
+receiving-code-review skill; reused previously read frozen inputs, TDD and
+verification instructions. Frozen hashes were rechecked and match the values
+above. No new interpretation, execution profile, field or public API is added.
+
+The review finding is confirmed: old/new records individually validated their
+container identities but did not validate the combined pair. This repair adds
+_pair_container_identities(old,new,paired_checks=()) in behavior.py. It compares
+both executor container IDs plus every old/new/pair check and probe container
+ID, rejecting any duplicate within this ONE authenticated pair. _pair_runs calls
+it after reading both authenticated runs; _pair_traces calls it after verifying
+the complete PairEvidence. Existing persisted differential verify_report calls
+both paths, and persisted group verification recursively verifies its pairs.
+The same rejection therefore applies during evaluation and later verification.
+No global state or cross-repetition uniqueness rule is introduced.
+
+Technical scope is only behavior.py (17added/1removed lines) and the existing
+behavior test file (144added lines). Models/snapshot helpers, signatures, schemas,
+dependencies, M1-M4 code, old tests and approval/activation policy are unchanged.
+Main owns governance; Task4/Docker/pointer implementation remains unstarted here.
+
+The ten new authenticated synthetic fixture cases use two signed differential
+bindings and their distinct subject probes. Old executor20..30 and new31..35
+are sequential; final snapshots40 and post checks50..51 are genuine fixture
+timestamps, not actual process execution. Pair probes/checkers run52..55/60..61
+and62..65/70..71. Cases reject shared old/new executor IDs, pair checker IDs
+overlapping either executor, pair probe IDs overlapping either run's check,
+pair checker/checker and probe/probe reuse, and checker/probe reuse across two
+different paired bindings. Every rejected case also exercises persisted
+differential and authenticated group verification. The distinct positive passes
+both verifier paths; existing repeated-success test continues to permit the same
+synthetic IDs in separate repetitions. Groups in the new test are deliberately
+authenticated invalid one-pair report groups to test recursive verification,
+not falsely labeled successful complete runs.
+
+Actual command evidence:
+
+- RED `uv run pytest tests/unit/test_behavior_contract.py -k test_r1 -q`:
+  exit1,9failed/1passed/71deselected4.59s; all nine defects falsely returned
+  valid=True, distinct control passed. Raw task-3-r1-red.log.
+- Initial GREEN same focused subset: exit0,10passed/71deselected2.90s.
+- Final focused file: exit0,81passed17.56s; raw task-3-r1-focused.log.
+- Full suite: exit0,938passed70.22s (928prior+10new);
+  raw task-3-r1-full.log.
+- In-process mutation _pair_container_identities=lambda *args:None restores
+  the old pair boundary without editing files. Same ten cases yield actual
+  exit1,9failed/1passed/71deselected2.83s; raw task-3-r1-mutant.log.
+- Ruff normal/no-ignore plus all four C901/PLR0911/PLR0912/PLR0915 under both
+  modes: all exit0. Mypy90files exit0. Both scanner inventories91entries.
+- uv sync --locked --offline exit0:46resolved/45checked. Protected baseline
+  diff5946530 over frozen files/schema/lock/pyproject and M1-M4 source is empty.
+  Both frozen SHA256s match; git diff --check passes. No network/subagents.
+
+This fixes the single approved record-consistency finding. It does not establish
+actual Docker isolation or grant Task3 independent PASS/M5 exit; rereview of the
+technical repair commit is next. Supports C1/C2/C5 mechanism integrity and
+prospective RQ3 only. No experimental, schedule or author-gate waiver.
+未开始下一模块（M6）；本修复未执行M5-4及以后任务。

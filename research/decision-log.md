@@ -1372,3 +1372,18 @@
 - Docker engine29.5.2 and locked local Linux/arm64 image090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
   remain available. No image pull, user-container changes or subject execution
   occurred during this resume check. Task4 follows only after Task3 PASS.
+
+## M5-010 - Paired Identity Repair Reviewed; Docker Task Begins
+
+- Date2026-09-10. Approved M5-3-R1 repairf94412dc4dc80125cbc1ffa2e7b0e54a6c0aa017
+  changes only behavior.py and its existing task test file. New10tests yield
+  genuine RED9fail/1pass, GREEN10; full938pass70.22s; focused81pass17.56s.
+  Guard-bypass mutant restores9actual failures. Other public/schema/locked
+  semantics remain unchanged; no global uniqueness across repetitions.
+- Original independent reviewer verifies old/new/pair disjointness, rejection
+  of previously signed faulty successes and containing groups, plus valid
+  cross-repetition reuse. Verdict ADDRESSED/specPASS/qualityPASS. The review
+  did not rerun fullsuite or execute Docker; report is preserved separately.
+- Task3 is complete within its technical scope. Task4 m5_4_docker_twin begins
+  atf94412d using genuine process capture and independent current validation.
+  Task4 is not complete and Tasks5-7 have not begun. No M5exit/M6 or experiment.
