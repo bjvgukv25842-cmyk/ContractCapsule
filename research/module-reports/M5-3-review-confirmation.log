@@ -1,0 +1,8 @@
+{"case": "distinct_containers", "valid": true, "blockers": [], "authenticated": true}
+{"case": "same_executor_container", "valid": true, "blockers": [], "authenticated": true}
+{"case": "pair_checker_in_executor_container", "valid": true, "blockers": [], "authenticated": true}
+Traceback (most recent call last):
+  File "/private/tmp/cc-m5-3-review.A5K8mb/diagnostics.py", line 48, in <module>
+    assert results[1:] == [False, False], "Cross-role container reuse was accepted"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Cross-role container reuse was accepted

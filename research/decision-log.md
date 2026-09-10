@@ -1341,3 +1341,19 @@
   effect-time validation, not caller-selected favorable repeats.
 - Independent bounded Task3 review is now pending. M5 remains in progress;
   no M6, formal experiment or schedule waiver.
+
+## M5-008 - Task3 Independent Review Requires Paired Identity Repair
+
+- Date2026-09-10. Review target20cb819, basef161910. Independent m5_3_task_review
+  reports one P2 finding and spec/quality REQUEST CHANGES. Same-pair container
+  reuse across old/new executors or subject/pair checker is accepted despite
+  within-run checks. Sequential timestamp reproductions rule out overlapping
+  synthetic-time setup as the cause. No Docker escape or forged host key claim.
+- Stable repair ID M5-3-R1; only behavior.py paired identity checks and focused
+  regressions are proposed. No global identity rule across repetitions, schema
+  change, dependency or new authority is proposed. No code repair is applied.
+- Reviewer report/diagnostic and controller-confirmed actual AssertionError
+  are archived.928passing implementation tests do not override this finding.
+  M5-1/2 remain independently passed; Tasks4-7 cannot begin before Task3 gate.
+- Stop for the author's established itemized repair approval under the
+  accepted M5 plan. M5 is incomplete; no M5 exit, M6 or formal experiment.

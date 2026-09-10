@@ -1,5 +1,10 @@
 # Claim-Evidence Matrix
 
+Current M5 gate2026-09-10: Tasks1/2 independently PASS; Task3 independent
+review REQUEST CHANGES for M5-3-R1 (cross-role container ID reuse within one
+pair).928passing implementation tests do not establish Task3 or M5 acceptance.
+Minimal repair requires itemized author approval; Task4-7/M6 remain unstarted.
+
 Latest implementation checkpoint2026-09-10: M5-1 technicalbbf031d supplies
 executable-binding and approval-boundary engineering evidence (46 new cases,
 809 cumulative). Its independent task review remains pending. M5 validation,

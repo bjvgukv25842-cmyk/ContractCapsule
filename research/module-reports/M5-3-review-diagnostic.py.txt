@@ -1,0 +1,48 @@
+import json
+import tempfile
+from pathlib import Path
+
+from tests.unit.test_behavior_contract import Harness, with_probe
+from contractcapsule.validate.run_models import CheckCapture, PairEvidence, ProcessCapture, identity, stage_subject
+
+
+def attach_pair(h, old, new, old_evidence, new_evidence, container_id):
+    inputs = (
+        h.context.initial.digest_value(), old_evidence.final.digest_value(),
+        new_evidence.final.digest_value(), identity(old.record.model_dump(mode="json")),
+        identity(new.record.model_dump(mode="json")),
+    )
+    process = ProcessCapture(
+        subject=stage_subject(h.bound, h.context, "pair", 0, "differential", inputs),
+        container_id=container_id, started_ns=60, finished_ns=61, exit_code=0,
+        terminated=True, timed_out=False, output_limited=False,
+        stdout=b'{"check_id":"differential","observation":true}', stderr=b"",
+    )
+    return h.writer.record_pair(old, new, PairEvidence(
+        repetition=0, old_record=old.record, new_record=new.record,
+        checks=(CheckCapture(check_id="differential", process=process, probes=()),),
+    ))
+
+
+def isolation_case(kind):
+    with tempfile.TemporaryDirectory() as tmp:
+        h = Harness(Path(tmp).resolve())
+        old_evidence, new_evidence = h.evidence("old"), h.evidence("new")
+        if kind == "same_executor_container":
+            new_evidence = new_evidence.model_copy(update={"executor": new_evidence.executor.model_copy(
+                update={"container_id": old_evidence.executor.container_id, "started_ns": 31, "finished_ns": 35}
+            )})
+        old, new = h.writer.record_run(old_evidence), h.writer.record_run(new_evidence)
+        pair_container = old_evidence.executor.container_id if kind == "pair_checker_in_executor_container" else "pair-container"
+        old, new = attach_pair(h, old, new, old_evidence, new_evidence, pair_container)
+        report = h.service.compare_runs(old, new, h.contract)
+        h.service.verify_report(report)
+        print(json.dumps({"case": kind, "valid": report.valid, "blockers": report.blockers, "authenticated": True}))
+        return report.valid
+
+
+results = [isolation_case(kind) for kind in (
+    "distinct_containers", "same_executor_container", "pair_checker_in_executor_container"
+)]
+assert results[0] is True
+assert results[1:] == [False, False], "Cross-role container reuse was accepted"
