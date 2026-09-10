@@ -1311,3 +1311,15 @@
   The report preserves fixture mistakes separately from genuine behavioral REDs.
 - Independent Task2 review is pending at exact917e702. Tasks3-7 remain; no
   behavioral run, Docker subject execution, active pointer or M5 exit result.
+
+## M5-006 - Independent Validation Task Reviewed
+
+- Date2026-09-10. Independent review gives spec PASS/quality PASS for Task2
+  exact917e702. No actionable finding; three targeted diagnostics reject
+  unavailable expansion with a lying compiler, forged matched-digest payload
+  and copied signed row under another record ID. No broad suite rerun is
+  attributed to the reviewer;857full passes remain implementation evidence.
+- Report M5-2-independent-review.md is preserved with its own exact target.
+  Task3 begins atf161910 to implement separate behavior/differential evaluation.
+  Expected report kinds/subjects and fresh effect-time validation remain
+  integration obligations. No Task3-7 outcome/M5 exit/M6 approval is implied.
