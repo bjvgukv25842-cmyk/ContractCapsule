@@ -1357,3 +1357,18 @@
   M5-1/2 remain independently passed; Tasks4-7 cannot begin before Task3 gate.
 - Stop for the author's established itemized repair approval under the
   accepted M5 plan. M5 is incomplete; no M5 exit, M6 or formal experiment.
+
+## M5-009 - Author Approves Paired Identity Repair
+
+- Date2026-09-10. The author explicitly approved M5-3-R1 and requested
+  continuation through the remaining M5 plan. Only the named pair-identity
+  repair and already-authorized tasks are covered; M6 and module exit are not.
+- Resume baseline5946530 contains technical20cb819 and the original independent
+  REQUEST CHANGES report. Original implementation/review evidence is preserved.
+  All frozen hashes and accepted ADR digest still match; worktree was clean.
+- Original implementer m5_3_behavior_evaluation resumes the narrow behavior.py
+  and test_behavior_contract.py fix with real RED/GREEN, followed by scoped
+  rereview. No schema/global repeat-identity policy/approval semantics change.
+- Docker engine29.5.2 and locked local Linux/arm64 image090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
+  remain available. No image pull, user-container changes or subject execution
+  occurred during this resume check. Task4 follows only after Task3 PASS.
