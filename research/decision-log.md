@@ -1295,3 +1295,19 @@
 - The journal is trusted-host result authority, separate from approval keys;
   a public transport report cannot issue or authenticate itself. No Task2-7
   completion, M5 exit, M6 or empirical result is claimed by this checkpoint.
+
+## M5-005 - Independent Validation and Report Journal Implemented
+
+- Date2026-09-10. Task2 technicalc4fa931/917e702 adds the shared m5_records
+  authenticated journal and request-scoped ValidationService. New report model
+  construction conveys no authority; stored exact HMAC record kind/scope/subject
+  and payload must verify. Publications/core/model/schema bytes stay unchanged.
+- Direct checks require P0/P1/root membership, closure/conflicts, native bytes
+  and handles, neutral render and full token counts. Compiler replay is only
+  supplemental. Current-time admission is separate from reconstruction as_of.
+  Failed authorization reports withhold identity and measurement metadata.
+- Implementation reports48focused/857full passes, Mypy86 and ordinary/no-ignore
+  Ruff/all4complexity scans; membership/HMAC bypass mutants fail actual tests.
+  The report preserves fixture mistakes separately from genuine behavioral REDs.
+- Independent Task2 review is pending at exact917e702. Tasks3-7 remain; no
+  behavioral run, Docker subject execution, active pointer or M5 exit result.
