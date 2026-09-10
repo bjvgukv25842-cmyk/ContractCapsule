@@ -1279,3 +1279,19 @@
   by the accepted prepare/activate transaction semantics. No fake in-memory
   once-only validation is a substitute for transaction-level replay protection.
 - No M5 feature is yet complete; all M6/experimental/module exit gates remain.
+
+## M5-004 - Executable Binding Task Reviewed
+
+- Date2026-09-10. Task1 technicalbbf031d8d83cfdf055ab6fc1a4aa617c7c8fc614
+  implements strict execution/profile/phase/expectation and clause mappings,
+  Registry-backed publication comparison, local package-byte snapshots and
+  separate reusable HMAC approval verification. It adds46tests; full809 pass.
+- Independent task reviewer m5_1_task_review gives spec PASS and quality PASS
+  with no actionable finding, plus10focused independent diagnostics. The
+  implementation report and independent review remain separate evidence.
+- Task2 begins at31e7b49. It will add independent view verification and the
+  narrow authenticated m5_records journal needed by its planned persisted
+  reports. Action/ticket/pointer tables remain Task5; no publication mutability.
+- The journal is trusted-host result authority, separate from approval keys;
+  a public transport report cannot issue or authenticate itself. No Task2-7
+  completion, M5 exit, M6 or empirical result is claimed by this checkpoint.
