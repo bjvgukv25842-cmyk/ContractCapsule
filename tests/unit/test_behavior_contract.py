@@ -14,6 +14,7 @@ from contractcapsule.validate.run_models import (
     EvaluationContext,
     PairEvidence,
     ProcessCapture,
+    RepetitionReport,
     RunEvidence,
     Snapshot,
     TreeEntry,
@@ -734,3 +735,146 @@ def test_empty_paired_check_set_is_not_vacuous_success(tmp_path: Path):
     )
     old, new = h.writer.record_pair(old, new, pair)
     assert not h.service.compare_runs(old, new, h.contract).valid
+
+
+def paired_identity_profile(raw):
+    """Two independently bound pair checks, each with a subject probe."""
+    with_pair_probe(raw)
+    contract = raw["replacement_contract"]
+    contract["verification"]["differential"].append("second pair label")
+    checks = contract["extensions"]["x-m5-execution"]["checks"]
+    second = dict(checks[-1])
+    second.update(
+        check_id="differential-second",
+        clause_path="verification/differential/1",
+        clause_sha256=digest(b"second pair label"),
+    )
+    second["subject_probes"] = [
+        dict(second["subject_probes"][0], probe_id="pair-second")
+    ]
+    checks.append(second)
+
+
+def recorded_identity_pair(h: Harness, fault: str):
+    old_evidence = h.evidence("old")
+    new_evidence = h.evidence("new")
+    new_executor = new_evidence.executor.model_copy(
+        update={"started_ns": 31, "finished_ns": 35}
+    )
+    if fault == "shared_executor":
+        new_executor = new_executor.model_copy(
+            update={"container_id": old_evidence.executor.container_id}
+        )
+    new_evidence = new_evidence.model_copy(update={"executor": new_executor})
+    old = h.writer.record_run(old_evidence)
+    new = h.writer.record_run(new_evidence)
+    inputs = (
+        h.context.initial.digest_value(),
+        old_evidence.final.digest_value(),
+        new_evidence.final.digest_value(),
+        identity(old.record.model_dump(mode="json")),
+        identity(new.record.model_dump(mode="json")),
+    )
+    names = {
+        "checker0": "pair-checker-0",
+        "probe0": "pair-probe-0",
+        "checker1": "pair-checker-1",
+        "probe1": "pair-probe-1",
+    }
+    collisions = {
+        "checker_old": ("checker0", old_evidence.executor.container_id),
+        "checker_new": ("checker0", new_executor.container_id),
+        "probe_old": ("probe0", old_evidence.checks[0].process.container_id),
+        "probe_new": ("probe0", new_evidence.checks[0].process.container_id),
+        "checker_checker": ("checker1", names["checker0"]),
+        "probe_probe": ("probe1", names["probe0"]),
+        "checker_prior_probe": ("checker1", names["probe0"]),
+        "probe_prior_checker": ("probe1", names["checker0"]),
+    }
+    if fault in collisions:
+        key, value = collisions[fault]
+        names[key] = value
+    captures = []
+    for index, check in enumerate(
+        c for c in h.bound.profile.checks if c.phase == "pair"
+    ):
+        probe = ProcessCapture(
+            subject=stage_subject(
+                h.bound,
+                h.context,
+                "pair",
+                0,
+                check.subject_probes[0].probe_id,
+                (inputs[2],),
+            ),
+            container_id=names[f"probe{index}"],
+            started_ns=52 + index * 10,
+            finished_ns=55 + index * 10,
+            exit_code=0,
+            terminated=True,
+            timed_out=False,
+            output_limited=False,
+            stdout=b"subject data",
+            stderr=b"",
+        )
+        checker = ProcessCapture(
+            subject=stage_subject(
+                h.bound, h.context, "pair", 0, check.check_id, inputs, (probe,)
+            ),
+            container_id=names[f"checker{index}"],
+            started_ns=60 + index * 10,
+            finished_ns=61 + index * 10,
+            exit_code=0,
+            terminated=True,
+            timed_out=False,
+            output_limited=False,
+            stdout=json.dumps(
+                {"check_id": check.check_id, "observation": True}
+            ).encode(),
+            stderr=b"",
+        )
+        captures.append(
+            CheckCapture(check_id=check.check_id, process=checker, probes=(probe,))
+        )
+    pair = PairEvidence(
+        repetition=0,
+        old_record=old.record,
+        new_record=new.record,
+        checks=tuple(captures),
+    )
+    return h.writer.record_pair(old, new, pair)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "distinct",
+        "shared_executor",
+        "checker_old",
+        "checker_new",
+        "probe_old",
+        "probe_new",
+        "checker_checker",
+        "probe_probe",
+        "checker_prior_probe",
+        "probe_prior_checker",
+    ],
+)
+def test_r1_complete_pair_container_identities(tmp_path: Path, fault):
+    h = Harness(tmp_path, paired_identity_profile)
+    old, new = recorded_identity_pair(h, fault)
+    report = h.service.compare_runs(old, new, h.contract)
+    assert report.valid is (fault == "distinct")
+    # Persist a group through the trusted report writer to exercise recursive
+    # verification even for old/malformed stored groups; no caller signature.
+    group = h.service._persist(
+        RepetitionReport(valid=False, blockers=("REPETITION_FAILED",), pairs=(report,))
+    )
+    if fault == "distinct":
+        h.service.verify_report(report)
+        h.service.verify_report(group)
+    else:
+        with pytest.raises(RecordError):
+            h.service.verify_report(report)
+        with pytest.raises(RecordError):
+            h.service.verify_report(group)

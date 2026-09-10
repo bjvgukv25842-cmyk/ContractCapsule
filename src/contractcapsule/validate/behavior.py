@@ -154,7 +154,9 @@ class BehaviorService:
             or old.pair_record != new.pair_record
         ):
             raise RecordError("record rejected")
-        return self._read_run(old), self._read_run(new)
+        old_evidence, new_evidence = self._read_run(old), self._read_run(new)
+        _pair_container_identities(old_evidence, new_evidence)
+        return old_evidence, new_evidence
 
     def _cross_preconditions(
         self, old: CompletedRunEvidence, new: CompletedRunEvidence
@@ -193,6 +195,7 @@ class BehaviorService:
             or evidence.repetition != old.repetition
         ):
             raise RecordError("record rejected")
+        _pair_container_identities(old_evidence, new_evidence, evidence.checks)
         checks = tuple(c for c in self.bound.profile.checks if c.phase == "pair")
         if not checks:
             raise RecordError("record rejected")
@@ -508,6 +511,18 @@ def _containers(captures: tuple[CheckCapture, ...]) -> list[str]:
         for capture in captures
         for process in (capture.process, *capture.probes)
     ]
+
+
+def _pair_container_identities(
+    old: CompletedRunEvidence,
+    new: CompletedRunEvidence,
+    paired_checks: tuple[CheckCapture, ...] = (),
+) -> None:
+    """Check one authenticated pair; identities may recur in separate repeats."""
+    containers = [old.executor.container_id, new.executor.container_id]
+    containers.extend(_containers(old.checks + new.checks + paired_checks))
+    if len(containers) != len(set(containers)):
+        raise RecordError("record rejected")
 
 
 def _unique_json(pairs):
