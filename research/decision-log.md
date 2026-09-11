@@ -1387,3 +1387,27 @@
 - Task3 is complete within its technical scope. Task4 m5_4_docker_twin begins
   atf94412d using genuine process capture and independent current validation.
   Task4 is not complete and Tasks5-7 have not begun. No M5exit/M6 or experiment.
+
+## M5-011 - Resume Incomplete Docker Work Without Claiming Task4 Completion
+
+- Date2026-09-11. Earlier Task4 worker disappeared with a stub and partial
+  process/tree helpers, no report. Newworker m5_4_resume progressed commits
+  e54026f,36340be,f44e8d4 and a single real test, but stopped before requested
+  approval/preconditions/checker/attempt integration. No Task4 PASS is claimed.
+- Docker was initially down, then restored by launching Docker Desktop;
+  engine29.5.2 became available. Original service503 and lost-worker state are
+  orchestration/environment issues, not successful feature executions.
+- Main read incomplete code and found missing lifecycle/cleanup/error checks
+  and same mutable volume aliasing code and workspace. These are routine
+  corrections within unfinished implementation, not an independent release
+  audit. No required scope is dropped. Split remaining Task4 implementation
+  into stable restricted stage4A and authentic full orchestration4B, both
+  remaining under the same Task4 exit/review requirement.
+- A worker force-added its ignored scratch report; preserve its exact content
+  with an explicit controller qualification in research, remove only Git tracking
+  of that one scratch file and leave the original on disk. No prior history
+  or user work is deleted. The initial happy-path claim remains qualified.
+- m5_4a_stage_recovery owns only stage/lifecycle/tree/stream helpers and tests.
+  Subsequent4B consumes its exact interfaces for the already-required real
+  same-executor task, current validation and signed fixed attempt group.
+  No Task5-7, M5exit, M6 or experimental result is authorized by a partial test.
