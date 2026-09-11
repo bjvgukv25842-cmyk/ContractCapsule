@@ -79,6 +79,7 @@ class DockerRunner:
             self._docker("cp", str(script), f"{seed}:/runner/program.py")
             argv = [
                 "run", "--pull=never", "--network=none", "--cidfile", str(cidfile),
+                "--name", "ccs-m5-subject-" + uuid.uuid4().hex,
                 "--read-only", "--user=65534:65534", "--cap-drop=ALL",
                 "--security-opt=no-new-privileges", "--pids-limit",
                 str(self.config.process_limit), "--cpus", str(self.config.cpu_limit),
@@ -96,6 +97,9 @@ class DockerRunner:
                 raise RunnerError("container identity unavailable") from exc
             if not container_id:
                 raise RunnerError("container identity unavailable")
+            state = self._docker("inspect", "--format", "{{.State.Running}}", container_id)
+            if state.stdout.strip() != b"false":
+                raise RunnerError("subject container not stopped")
             keeper = "ccs-m5-keeper-" + uuid.uuid4().hex
             self._docker("run", "-d", "--name", keeper, "--pull=never",
                          "--network=none", "--read-only", "--user", "65534:65534",
