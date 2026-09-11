@@ -43,6 +43,19 @@ class DockerRunner:
                        err_limit=self.config.stderr_limit_bytes)
 
     def execute(self, *, subject: str, program: str, files: dict[str, bytes]) -> DockerResult:
+        containers: list[str] = []
+        volumes: list[str] = []
+        try:
+            return self._execute(subject=subject, program=program, files=files,
+                                 containers=containers, volumes=volumes)
+        finally:
+            for container in reversed(containers):
+                self._docker("rm", "-f", container)
+            for volume in volumes:
+                self._docker("volume", "rm", volume)
+
+    def _execute(self, *, subject: str, program: str, files: dict[str, bytes],
+                 containers: list[str], volumes: list[str]) -> DockerResult:
         if not subject.startswith("sha256:") or len(subject) != 71:
             raise RunnerError("invalid subject identity")
         with tempfile.TemporaryDirectory(prefix="ccs-m5-run-") as directory:
@@ -63,6 +76,9 @@ class DockerRunner:
             script.write_text(program, encoding="utf-8")
             volume = "ccs-m5-" + uuid.uuid4().hex
             seed = "ccs-m5-seed-" + uuid.uuid4().hex
+            subject_name = "ccs-m5-subject-" + uuid.uuid4().hex
+            volumes.append(volume)
+            containers.extend((seed, subject_name))
             cidfile = root / "cid"
             self._docker("volume", "create", "--driver", "local", "--opt",
                          "type=tmpfs", "--opt", "device=tmpfs", "--opt",
@@ -79,7 +95,7 @@ class DockerRunner:
             self._docker("cp", str(script), f"{seed}:/runner/program.py")
             argv = [
                 "run", "--pull=never", "--network=none", "--cidfile", str(cidfile),
-                "--name", "ccs-m5-subject-" + uuid.uuid4().hex,
+                "--name", subject_name,
                 "--read-only", "--user=65534:65534", "--cap-drop=ALL",
                 "--security-opt=no-new-privileges", "--pids-limit",
                 str(self.config.process_limit), "--cpus", str(self.config.cpu_limit),
@@ -97,10 +113,13 @@ class DockerRunner:
                 raise RunnerError("container identity unavailable") from exc
             if not container_id:
                 raise RunnerError("container identity unavailable")
+            if out.timed_out or out.limited:
+                self._docker("kill", container_id)
             state = self._docker("inspect", "--format", "{{.State.Running}}", container_id)
             if state.stdout.strip() != b"false":
                 raise RunnerError("subject container not stopped")
             keeper = "ccs-m5-keeper-" + uuid.uuid4().hex
+            containers.append(keeper)
             self._docker("run", "-d", "--name", keeper, "--pull=never",
                          "--network=none", "--read-only", "--user", "65534:65534",
                          "--cap-drop=ALL", "-v", f"{volume}:/workspace:ro",
