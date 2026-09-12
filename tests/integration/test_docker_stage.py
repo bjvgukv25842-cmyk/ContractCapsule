@@ -281,6 +281,25 @@ def test_malformed_transport_fails_closed():
         DockerRunner(config()).run_stage("sha256:" + "a" * 64, {"test_id": "x"}, (), {})
 
 
+@pytest.mark.parametrize("payload", [b"[]", b"{}", b"not-json"])
+def test_malformed_image_inspection_fails_closed(monkeypatch, payload):
+    lifecycle = DockerLifecycle(config())
+    monkeypatch.setattr(lifecycle, "control", lambda *args, **kwargs: payload)
+    with pytest.raises(RunnerError, match="malformed image inspection"):
+        lifecycle.preflight()
+
+
+def test_malformed_container_state_fails_closed(monkeypatch):
+    lifecycle = DockerLifecycle(config())
+    monkeypatch.setattr(
+        lifecycle,
+        "control",
+        lambda *args, **kwargs: b'[{"Id":"' + b"a" * 64 + b'","State":{"Running":false,"Status":"exited","ExitCode":0}}]',
+    )
+    with pytest.raises(RunnerError, match="malformed container state"):
+        lifecycle.state("a" * 64)
+
+
 def test_truncated_tar_never_certified():
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w") as archive:

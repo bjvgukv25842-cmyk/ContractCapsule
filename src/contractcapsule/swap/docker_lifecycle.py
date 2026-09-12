@@ -37,12 +37,22 @@ class DockerLifecycle:
         return output.stdout
 
     def preflight(self) -> None:
-        image = json.loads(self.control("image", "inspect", self.config.image_digest))[
-            0
-        ]
-        platform = image["Os"] + "/" + image["Architecture"]
-        if image["Id"] != self.config.image_digest or platform != self.config.platform:
-            raise RunnerError("image identity/platform mismatch")
+        try:
+            payload = json.loads(self.control("image", "inspect", self.config.image_digest))
+            if type(payload) is not list or len(payload) != 1 or type(payload[0]) is not dict:
+                raise ValueError("malformed image inspection")
+            image = payload[0]
+            image_id, operating_system = image["Id"], image["Os"]
+            architecture = image["Architecture"]
+            if not all(type(value) is str for value in (image_id, operating_system, architecture)):
+                raise ValueError("malformed image identity")
+            platform = operating_system + "/" + architecture
+            if image_id != self.config.image_digest or platform != self.config.platform:
+                raise RunnerError("image identity/platform mismatch")
+        except RunnerError:
+            raise
+        except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            raise RunnerError("malformed image inspection") from exc
 
     def flags(self) -> list[str]:
         return [
@@ -137,15 +147,20 @@ class DockerLifecycle:
         return ["--mount", f"type=bind,src={source},dst={destination},readonly"]
 
     def state(self, container: str) -> dict[str, Any]:
-        result = json.loads(self.control("inspect", container))[0]
-        state = result["State"]
-        if (
-            result["Id"] != container
-            or type(state["Running"]) is not bool
-            or type(state["ExitCode"]) is not int
-        ):
-            raise RunnerError("malformed container state")
-        return state
+        try:
+            payload = json.loads(self.control("inspect", container))
+            if type(payload) is not list or len(payload) != 1 or type(payload[0]) is not dict:
+                raise ValueError("malformed container state")
+            result = payload[0]
+            state = result["State"]
+            if type(state) is not dict or result["Id"] != container:
+                raise ValueError("malformed container state")
+            required = {"Running", "Status", "ExitCode", "OOMKilled", "Error"}
+            if set(state) < required or type(state["Running"]) is not bool or type(state["Status"]) is not str or type(state["ExitCode"]) is not int or type(state["OOMKilled"]) is not bool or type(state["Error"]) is not str:
+                raise ValueError("malformed container state")
+            return state
+        except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            raise RunnerError("malformed container state") from exc
 
     def check_quota(self, stderr: bytes) -> None:
         free = json.loads(
