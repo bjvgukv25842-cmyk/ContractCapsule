@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlsplit
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from contractcapsule.swap.trees import FrozenTree, RunnerError
 from contractcapsule.validate.models import RunnerConfig
