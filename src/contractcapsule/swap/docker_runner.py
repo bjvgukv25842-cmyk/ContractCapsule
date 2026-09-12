@@ -1,142 +1,155 @@
-"""Bounded local Docker execution.
+"""Host-only restricted stages; this service does not grant execution approval."""
 
-The runner deliberately treats Docker as an untrusted transport: every command
-is an argv list, the image is addressed by digest, and output is collected
-before the subject tree is handed to the trusted host.
-"""
 from __future__ import annotations
 
+import re
 import tempfile
-import uuid
-from dataclasses import dataclass
+import time
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from contractcapsule.swap.process_io import bounded
-from contractcapsule.swap.trees import RunnerError, capture_tree
+from contractcapsule.swap.docker_lifecycle import DockerLifecycle
+from contractcapsule.swap.process_io import Output, bounded
+from contractcapsule.swap.staging import prepare_stage
+from contractcapsule.swap.trees import FrozenTree, RunnerError, read_tar
+from contractcapsule.validate.models import Artifact, Invocation, RunnerConfig
+from contractcapsule.validate.run_models import ProcessCapture
 
 
 @dataclass(frozen=True)
-class ProcessResult:
-    stdout: bytes
-    stderr: bytes
-    exit_code: int | None
-    terminated: bool
-    timed_out: bool = False
-    output_limited: bool = False
-    container_id: str = ""
+class StageResult:
+    process: ProcessCapture
+    tree: FrozenTree | None
+    snapshot_ns: int | None
+    blockers: tuple[str, ...] = ()
+    retained_containers: tuple[str, ...] = ()
+    retained_volumes: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
-class DockerResult:
-    process: ProcessResult
-    tree: dict[str, bytes]
-    snapshot: object
+# Import compatibility for the incomplete legacy twin module, not an approval API.
+DockerResult = StageResult
+
+
+class StageError(RunnerError):
+    """Preparation failure with exact known resources needing reconciliation."""
+
+    def __init__(self, message: str, lifecycle: DockerLifecycle) -> None:
+        super().__init__(message)
+        self.retained_containers = tuple(lifecycle.containers)
+        self.retained_volumes = tuple(lifecycle.volumes)
 
 
 class DockerRunner:
-    def __init__(self, config):
-        self.config = config
+    def __init__(self, config: RunnerConfig) -> None:
+        self.config = RunnerConfig.model_validate(config.model_dump())
 
-    def _docker(self, *args: str, timeout: float | None = None):
-        return bounded(["docker", *args], timeout=timeout or self.config.timeout_seconds,
-                       out_limit=self.config.stdout_limit_bytes,
-                       err_limit=self.config.stderr_limit_bytes)
+    def execute(self, **kwargs: object) -> StageResult:
+        """Reject the earlier unapproved program-string orchestration stub."""
+        raise RunnerError("use verified host run_stage inputs")
 
-    def execute(self, *, subject: str, program: str, files: dict[str, bytes]) -> DockerResult:
-        containers: list[str] = []
-        volumes: list[str] = []
-        try:
-            return self._execute(subject=subject, program=program, files=files,
-                                 containers=containers, volumes=volumes)
-        finally:
-            for container in reversed(containers):
-                self._docker("rm", "-f", container)
-            for volume in volumes:
-                self._docker("volume", "rm", volume)
-
-    def _execute(self, *, subject: str, program: str, files: dict[str, bytes],
-                 containers: list[str], volumes: list[str]) -> DockerResult:
-        if not subject.startswith("sha256:") or len(subject) != 71:
-            raise RunnerError("invalid subject identity")
-        with tempfile.TemporaryDirectory(prefix="ccs-m5-run-") as directory:
-            root = Path(directory)
-            (root / "runner").mkdir()
-            workspace = root / "workspace"
-            workspace.mkdir()
-            for name, data in files.items():
-                target = workspace / name
-                if workspace not in target.parents or target == workspace:
-                    raise RunnerError("unsafe input path")
-                if target.is_symlink() or ".." in Path(name).parts:
-                    raise RunnerError("unsafe input path")
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(data)
-                target.chmod(0o666)
-            script = root / "runner" / "program.py"
-            script.write_text(program, encoding="utf-8")
-            volume = "ccs-m5-" + uuid.uuid4().hex
-            seed = "ccs-m5-seed-" + uuid.uuid4().hex
-            subject_name = "ccs-m5-subject-" + uuid.uuid4().hex
-            volumes.append(volume)
-            containers.extend((seed, subject_name))
-            cidfile = root / "cid"
-            self._docker("volume", "create", "--driver", "local", "--opt",
-                         "type=tmpfs", "--opt", "device=tmpfs", "--opt",
-                         f"o=size={self.config.output_tree_limit_bytes},nr_inodes={self.config.output_tree_file_limit},uid=65534,gid=65534,mode=0755",
-                         volume)
-            self._docker("run", "-d", "--name", seed, "--pull=never",
-                         "--network=none", "--read-only", "--user", "65534:65534",
-                         "--cap-drop=ALL", "--security-opt=no-new-privileges",
-                         "-v", f"{volume}:/workspace:rw", "-v", f"{volume}:/runner:rw", self.config.image_digest,
-                         "sleep", "300")
-            for name, data in files.items():
-                src = workspace / name
-                self._docker("cp", str(src), f"{seed}:/workspace/{name}")
-            self._docker("cp", str(script), f"{seed}:/runner/program.py")
-            argv = [
-                "run", "--pull=never", "--network=none", "--cidfile", str(cidfile),
-                "--name", subject_name,
-                "--read-only", "--user=65534:65534", "--cap-drop=ALL",
-                "--security-opt=no-new-privileges", "--pids-limit",
-                str(self.config.process_limit), "--cpus", str(self.config.cpu_limit),
-                "--memory", str(self.config.memory_bytes), "--memory-swap",
-                str(self.config.memory_bytes), "--platform", self.config.platform,
-                "-v", f"{volume}:/workspace:rw", "-v", f"{volume}:/runner:ro", self.config.image_digest,
-                "python", "-I", "/runner/program.py",
-            ]
-            out = self._docker(*argv)
-            if out.exit_code == 125 or b"Cannot connect to the Docker daemon" in out.stderr:
-                raise RunnerError("docker unavailable")
+    def run_stage(
+        self,
+        subject: str,
+        invocation: Invocation,
+        artifacts: tuple[Artifact, ...],
+        inputs: Mapping[str, FrozenTree | bytes],
+        workspace: FrozenTree | None = None,
+    ) -> StageResult:
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", subject):
+            raise RunnerError("invalid stage identity")
+        lifecycle = DockerLifecycle(self.config)
+        result: StageResult | None = None
+        failure: Exception | None = None
+        with tempfile.TemporaryDirectory(prefix="ccs-m5-stage-") as directory:
             try:
-                container_id = cidfile.read_text(encoding="ascii").strip()
-            except OSError as exc:
-                raise RunnerError("container identity unavailable") from exc
-            if not container_id:
-                raise RunnerError("container identity unavailable")
+                entry = prepare_stage(
+                    Path(directory),
+                    invocation,
+                    artifacts,
+                    inputs,
+                    workspace,
+                    self.config,
+                )
+                lifecycle.preflight()
+                container = lifecycle.prepare(Path(directory), entry, invocation.argv)
+                result = self._execute(subject, container, lifecycle)
+            except (OSError, ValueError) as exc:
+                failure = exc
+            finally:
+                cleanup = lifecycle.cleanup()
+        if result is None:
+            raise StageError(
+                str(failure or "stage did not execute"), lifecycle
+            ) from failure
+        if cleanup:
+            result = replace(
+                result,
+                tree=None,
+                snapshot_ns=None,
+                blockers=(*result.blockers, *cleanup),
+                retained_containers=tuple(lifecycle.containers),
+                retained_volumes=tuple(lifecycle.volumes),
+            )
+        return result
+
+    def _execute(
+        self, subject: str, container: str, lifecycle: DockerLifecycle
+    ) -> StageResult:
+        started = time.monotonic_ns()
+        out = Output(b"", b"", None, False, False)
+        stopped = False
+        exit_code: int | None = None
+        blockers: list[str] = []
+        try:
+            out = bounded(
+                ["docker", "start", "-a", container],
+                timeout=self.config.timeout_seconds,
+                out_limit=self.config.stdout_limit_bytes,
+                err_limit=self.config.stderr_limit_bytes,
+            )
             if out.timed_out or out.limited:
-                self._docker("kill", container_id)
-            state = self._docker("inspect", "--format", "{{.State.Running}}", container_id)
-            if state.stdout.strip() != b"false":
-                raise RunnerError("subject container not stopped")
-            keeper = "ccs-m5-keeper-" + uuid.uuid4().hex
-            containers.append(keeper)
-            self._docker("run", "-d", "--name", keeper, "--pull=never",
-                         "--network=none", "--read-only", "--user", "65534:65534",
-                         "--cap-drop=ALL", "-v", f"{volume}:/workspace:ro",
-                         self.config.image_digest, "sleep", "300")
-            exported = root / "exported"
-            self._docker("cp", f"{keeper}:/workspace/.", str(exported))
-            self._docker("rm", "-f", keeper)
-            self._docker("rm", "-f", seed)
-            self._docker("volume", "rm", volume)
-            snapshot = capture_tree(exported, self.config)
-            process = ProcessResult(
-                stdout=out.stdout, stderr=out.stderr, exit_code=out.exit_code,
-                terminated=out.exit_code is not None, timed_out=out.timed_out,
-                output_limited=out.limited, container_id=container_id,
+                lifecycle.control("kill", container)
+                blockers.append("timeout" if out.timed_out else "output limit")
+            state = lifecycle.state(container)
+            stopped = state["Running"] is False and state["Status"] == "exited"
+            if not stopped:
+                raise RunnerError("subject termination uncertain")
+            exit_code = state["ExitCode"]
+            if state["OOMKilled"] or state["Error"]:
+                blockers.append("container resource or runtime failure")
+        except (OSError, ValueError):
+            blockers.append("container control or termination uncertain")
+        finished = time.monotonic_ns()
+        process = ProcessCapture(
+            subject=subject,
+            container_id=container,
+            started_ns=started,
+            finished_ns=finished,
+            exit_code=exit_code,
+            terminated=stopped,
+            timed_out=out.timed_out,
+            output_limited=out.limited,
+            stdout=out.stdout,
+            stderr=out.stderr,
+        )
+        tree, snapshot_ns = self._snapshot(lifecycle, process, blockers)
+        return StageResult(process, tree, snapshot_ns, tuple(blockers))
+
+    def _snapshot(
+        self, lifecycle: DockerLifecycle, process: ProcessCapture, blockers: list[str]
+    ) -> tuple[FrozenTree | None, int | None]:
+        if not process.terminated:
+            return None, None
+        try:
+            lifecycle.check_quota(process.stderr)
+            size = self.config.output_tree_limit_bytes
+            overhead = self.config.output_tree_file_limit * 4096 + 10240
+            raw = lifecycle.control(
+                "cp", f"{lifecycle.keeper}:/workspace/.", "-", out_limit=size + overhead
             )
-            return DockerResult(
-                process=process,
-                tree={name: data for name, data in snapshot.files},
-                snapshot=snapshot.snapshot,
-            )
+            tree = read_tar(raw, self.config, docker=True)
+            return tree, time.monotonic_ns()
+        except (OSError, ValueError):
+            blockers.append("workspace quota or capture failure")
+            return None, None

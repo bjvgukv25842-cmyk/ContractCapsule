@@ -33,27 +33,61 @@ class FrozenTree:
             (root / entry.path).chmod(entry.mode)
 
 
+def validate_tree(tree: FrozenTree, limits: RunnerConfig) -> None:
+    snapshot = Snapshot.model_validate(tree.snapshot.model_dump())
+    validate_snapshot(snapshot, limits)
+    contents = dict(tree.files)
+    expected = {e.path for e in snapshot.entries if e.kind == "file"}
+    if len(contents) != len(tree.files) or set(contents) != expected:
+        raise RunnerError("tree bytes incomplete or duplicated")
+    for entry in snapshot.entries:
+        if entry.kind == "file":
+            data = contents[entry.path]
+            if (
+                type(data) is not bytes
+                or len(data) != entry.size
+                or digest_bytes(data) != entry.digest
+            ):
+                raise RunnerError("tree bytes changed")
+
+
 def read_tar(raw: bytes, limits: RunnerConfig, *, docker: bool = False) -> FrozenTree:
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
+            return _read_archive(archive, limits, docker)
+    except tarfile.TarError as exc:
+        raise RunnerError("malformed or incomplete TAR") from exc
+
+
+def _tar_name(member: tarfile.TarInfo, docker: bool) -> str:
+    name = member.name.removesuffix("/") if member.isdir() else member.name
+    if docker and name != ".":
+        if not name.startswith("./"):
+            raise RunnerError("unexpected Docker TAR root")
+        name = name[2:]
+    _safe_name(name)
+    return name
+
+
+def _read_archive(
+    archive: tarfile.TarFile, limits: RunnerConfig, docker: bool
+) -> FrozenTree:
     entries: list[TreeEntry] = []
     files: list[tuple[str, bytes]] = []
     total = 0
-    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
-        for member in archive:
-            name = member.name.rstrip("/")
-            if docker:
-                name = name.partition("/")[2] or "."
-            if not docker and name == "":
-                name = "."
-            _safe_name(name)
-            if len(entries) >= limits.output_tree_file_limit:
-                raise RunnerError("tree limit exceeded")
-            total += member.size
-            if total > limits.output_tree_limit_bytes:
-                raise RunnerError("tree limit exceeded")
-            entry, data = _member(archive, member, name)
-            entries.append(entry)
-            if data is not None:
-                files.append((name, data))
+    for member in archive:
+        name = _tar_name(member, docker)
+        if len(entries) >= limits.output_tree_file_limit:
+            raise RunnerError("tree limit exceeded")
+        total += member.size
+        if member.size < 0 or total > limits.output_tree_limit_bytes:
+            raise RunnerError("tree limit exceeded")
+        entry, data = _member(archive, member, name)
+        entries.append(entry)
+        if data is not None:
+            files.append((name, data))
+    if docker and not any(e.path == "." for e in entries):
+        raise RunnerError("missing Docker TAR root")
     if not any(e.path == "." for e in entries):
         entries.append(TreeEntry(path=".", kind="directory", mode=0o755))
     snapshot = Snapshot(entries=tuple(sorted(entries, key=lambda e: e.path)))
@@ -70,6 +104,8 @@ def _safe_name(name: str) -> None:
 
 
 def _member(archive, member, name) -> tuple[TreeEntry, bytes | None]:
+    if member.issparse():
+        raise RunnerError("sparse TAR entries unsupported")
     if member.isdir():
         return TreeEntry(path=name, kind="directory", mode=member.mode), None
     if not member.isfile() or member.linkname:
@@ -80,8 +116,13 @@ def _member(archive, member, name) -> tuple[TreeEntry, bytes | None]:
     data = stream.read(member.size + 1)
     if len(data) != member.size:
         raise RunnerError("incomplete tree")
-    return TreeEntry(path=name, kind="file", mode=member.mode,
-                     digest=digest_bytes(data), size=len(data)), data
+    return TreeEntry(
+        path=name,
+        kind="file",
+        mode=member.mode,
+        digest=digest_bytes(data),
+        size=len(data),
+    ), data
 
 
 def capture_tree(root: Path, limits: RunnerConfig) -> FrozenTree:
@@ -95,7 +136,9 @@ def capture_tree(root: Path, limits: RunnerConfig) -> FrozenTree:
         if len(entries) >= limits.output_tree_file_limit:
             raise RunnerError("tree limit exceeded")
         if stat.S_ISDIR(info.st_mode):
-            entries.append(TreeEntry(path=name, kind="directory", mode=stat.S_IMODE(info.st_mode)))
+            entries.append(
+                TreeEntry(path=name, kind="directory", mode=stat.S_IMODE(info.st_mode))
+            )
             continue
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise RunnerError("unsupported tree entry")
@@ -105,8 +148,15 @@ def capture_tree(root: Path, limits: RunnerConfig) -> FrozenTree:
         data = path.read_bytes()
         if len(data) != info.st_size:
             raise RunnerError("tree changed during capture")
-        entries.append(TreeEntry(path=name, kind="file", mode=stat.S_IMODE(info.st_mode),
-                                 digest=digest_bytes(data), size=len(data)))
+        entries.append(
+            TreeEntry(
+                path=name,
+                kind="file",
+                mode=stat.S_IMODE(info.st_mode),
+                digest=digest_bytes(data),
+                size=len(data),
+            )
+        )
         files.append((name, data))
     snapshot = Snapshot(entries=tuple(sorted(entries, key=lambda e: e.path)))
     validate_snapshot(snapshot, limits)
