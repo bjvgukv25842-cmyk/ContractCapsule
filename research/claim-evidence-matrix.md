@@ -1,5 +1,12 @@
 # Claim-Evidence Matrix
 
+Latest 2026-09-13: the M5 worktree has recovered at `ea68558`. M5-1/2/3 remain
+independently reviewed; Docker malformed-response repair re-review and M5-4
+completion are pending. Existing low-level tests do not establish an actual
+authenticated twin replacement or activation/rollback. See
+`module-reports/M5-2026-09-13-resume.md`; all later statements below retain
+their historical checkpoint dates. No C3/C4 or empirical RQ result is added.
+
 Latest2026-09-10: author-approved M5-3-R1 is fixed atf94412d and independently
 reviewed ADDRESSED/specPASS/qualityPASS. Task3's original open finding is closed
 for this repaired candidate; Tasks1-3 are reviewed engineering increments.

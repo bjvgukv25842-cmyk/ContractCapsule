@@ -1411,3 +1411,22 @@
   Subsequent4B consumes its exact interfaces for the already-required real
   same-executor task, current validation and signed fixed attempt group.
   No Task5-7, M5exit, M6 or experimental result is authorized by a partial test.
+
+## M5-012 — Restored Worktree and Approved Docker Response Repair Re-review
+
+- Date 2026-09-13. User explicitly approved the malformed Docker image/state
+  response repair, then asked to resume all unfinished M5 tasks. The worktree
+  is restored and clean at ea68558; the earlier missing-directory interruption
+  is not test success. No prior branch history or research record is rewritten.
+- Recovered 6e798c7 combines response repair with unfinished orchestration;
+  de1496e/ea68558 add limited source/attempt coverage. Commit titles and passing
+  low-level tests do not establish Task4 completion. Exact recovery report:
+  research/module-reports/M5-2026-09-13-resume.md.
+- Both frozen hashes and accepted ADR-0005 hash match. Protected source,
+  schemas, dependencies and Task1-3 are unchanged from 66d6ca7. Task1-3 are
+  not restarted. Fresh default lint/type/offline-lock checks pass; ordinary
+  and no-ignore complexity checks both identify unfinished git_tree failures.
+- A fresh native independent agent reviews only the approved malformed-response
+  repair in an exact separate copy. Main performs cumulative validation and
+  governance recovery. Task4B completion follows its scoped verdict; Task5-7
+  remain. No M5 exit, M6, formal experiment or schedule waiver is granted.
