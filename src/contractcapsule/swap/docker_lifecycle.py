@@ -51,7 +51,7 @@ class DockerLifecycle:
                 raise RunnerError("image identity/platform mismatch")
         except RunnerError:
             raise
-        except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        except (OSError, TypeError, ValueError, KeyError, RecursionError) as exc:
             raise RunnerError("malformed image inspection") from exc
 
     def flags(self) -> list[str]:
@@ -159,7 +159,7 @@ class DockerLifecycle:
             if set(state) < required or type(state["Running"]) is not bool or type(state["Status"]) is not str or type(state["ExitCode"]) is not int or type(state["OOMKilled"]) is not bool or type(state["Error"]) is not str:
                 raise ValueError("malformed container state")
             return state
-        except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        except (OSError, TypeError, ValueError, KeyError, RecursionError) as exc:
             raise RunnerError("malformed container state") from exc
 
     def check_quota(self, stderr: bytes) -> None:

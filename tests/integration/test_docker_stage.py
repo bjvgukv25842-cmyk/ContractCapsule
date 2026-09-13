@@ -8,7 +8,7 @@ import tarfile
 import pytest
 
 from contractcapsule.swap.docker_lifecycle import DockerLifecycle
-from contractcapsule.swap.docker_runner import DockerRunner
+from contractcapsule.swap.docker_runner import DockerRunner, StageError
 from contractcapsule.swap.process_io import checked
 from contractcapsule.swap.trees import FrozenTree, RunnerError, capture_tree, read_tar
 from contractcapsule.validate.models import Artifact, Invocation
@@ -311,6 +311,69 @@ def test_truncated_tar_never_certified():
         archive.addfile(entry, io.BytesIO(b"x" * 1024))
     with pytest.raises(RunnerError):
         read_tar(stream.getvalue()[:1200], config(), docker=True)
+
+
+@pytest.mark.parametrize("inspection", ["image", "state"])
+def test_deeply_nested_inspection_returns_stable_error(monkeypatch, inspection):
+    lifecycle = DockerLifecycle(config())
+    payload = b"[" * 10000 + b"0" + b"]" * 10000
+    monkeypatch.setattr(lifecycle, "control", lambda *args, **kwargs: payload)
+    message = "image inspection" if inspection == "image" else "container state"
+    with pytest.raises(RunnerError, match="malformed " + message):
+        if inspection == "image":
+            lifecycle.preflight()
+        else:
+            lifecycle.state("a" * 64)
+
+
+def test_deeply_nested_image_stage_reports_preparation_failure(monkeypatch):
+    original = DockerLifecycle.control
+
+    def control(self, *args, **kwargs):
+        if args[:2] == ("image", "inspect"):
+            return b"[" * 10000 + b"0" + b"]" * 10000
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(DockerLifecycle, "control", control)
+    with pytest.raises(StageError, match="malformed image inspection") as error:
+        stage("print('must not start')")
+    assert error.value.retained_containers == ()
+    assert error.value.retained_volumes == ()
+
+
+@pytest.mark.parametrize("subject_state", [False, True])
+def test_deeply_nested_state_preserves_failure_and_cleanup(monkeypatch, subject_state):
+    original = DockerLifecycle.control
+    owned_containers = []
+    owned_volumes = []
+
+    def control(self, *args, **kwargs):
+        if args[0] == "inspect" and len(owned_containers) == (3 if subject_state else 2):
+            return b"[" * 10000 + b"0" + b"]" * 10000
+        result = original(self, *args, **kwargs)
+        if args[0] == "create":
+            owned_containers.append(result.decode().strip())
+        if args[:2] == ("volume", "create"):
+            owned_volumes.append(result.decode().strip())
+        return result
+
+    monkeypatch.setattr(DockerLifecycle, "control", control)
+    if subject_state:
+        result = stage("print('actual output')")
+        assert result.process.stdout == b"actual output\n"
+        assert not result.process.terminated
+        assert result.tree is None and result.snapshot_ns is None
+        assert result.blockers == ("container control or termination uncertain",)
+        assert result.retained_containers == result.retained_volumes == ()
+    else:
+        with pytest.raises(StageError, match="malformed container state") as error:
+            stage("print('must not start')")
+        assert error.value.retained_containers == error.value.retained_volumes == ()
+    containers = checked(["docker", "ps", "-aq", "--no-trunc"]).decode().splitlines()
+    volumes = checked(["docker", "volume", "ls", "-q"]).decode().splitlines()
+    assert owned_containers and owned_volumes
+    assert not set(owned_containers).intersection(containers)
+    assert not set(owned_volumes).intersection(volumes)
 
 
 def test_workspace_directory_and_permission_changes_captured(tmp_path):
