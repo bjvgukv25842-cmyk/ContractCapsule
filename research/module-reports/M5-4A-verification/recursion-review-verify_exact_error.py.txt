@@ -1,0 +1,23 @@
+"""Assert exact normalized errors and retained decoder causes at d5ad681."""
+
+from contractcapsule.swap.docker_lifecycle import DockerLifecycle
+from contractcapsule.swap.trees import RunnerError
+from tests.integration.test_twin_run import config
+
+payload = b"[" * 10_000 + b"0" + b"]" * 10_000
+
+for method, args, message in (
+    ("preflight", (), "malformed image inspection"),
+    ("state", ("a" * 64,), "malformed container state"),
+):
+    lifecycle = DockerLifecycle(config())
+    lifecycle.control = lambda *control, **kwargs: payload  # type: ignore[method-assign]
+    try:
+        getattr(lifecycle, method)(*args)
+    except RunnerError as exc:
+        assert type(exc) is RunnerError
+        assert str(exc) == message
+        assert type(exc.__cause__) is RecursionError
+        print(method, type(exc).__name__, type(exc.__cause__).__name__, str(exc))
+    else:
+        raise AssertionError(f"{method} accepted deeply nested Docker JSON")

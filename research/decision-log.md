@@ -1430,3 +1430,22 @@
   repair in an exact separate copy. Main performs cumulative validation and
   governance recovery. Task4B completion follows its scoped verdict; Task5-7
   remain. No M5 exit, M6, formal experiment or schedule waiver is granted.
+
+## M5-013 — Approved Docker Response Repair Independently Closed
+
+- Date2026-09-13. Independent scoped review of recovered ea68558 reproduced a
+  residual raw RecursionError for depth10,000 image/state JSON. This is within
+  the author's already explicit malformed-response repair authorization.
+- After two native implementation-worker429 interruptions with no source edits,
+  main wrote five failing regressions and the two-line decoder correction.
+  d5ad681 preserves APIs/limits/dependencies. RED5, GREEN5; stage38 and full979
+  pass. Original failed review and logs remain archived, not overwritten.
+- Original independent reviewer verified exactd5ad681 in a separate clean
+  physical copy: finding ADDRESSED, scoped specPASS/qualityPASS, no new finding;
+  independent9focused tests and exact error/cleanup assertions pass. Report
+  M5-4A-recursion-independent-rereview.md and verification logs are preserved.
+- Task4B completion resumes with m5_4b_completion; its first native dispatch
+  hit429 and the same task is retried without discarding any test result.
+  M5-4B has no acceptance yet, no Task5/6/7 or M6 work is claimed, and formal
+  progress remains5/12. M5 exit and any new independent repair findings retain
+  their author gates.

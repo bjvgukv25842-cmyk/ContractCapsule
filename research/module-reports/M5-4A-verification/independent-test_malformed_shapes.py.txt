@@ -1,0 +1,301 @@
+"""Independent M5-4A malformed Docker response and cleanup diagnostics."""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from contractcapsule.swap.docker_lifecycle import DockerLifecycle
+from contractcapsule.swap.docker_runner import DockerRunner, StageError
+from contractcapsule.swap.process_io import checked
+from contractcapsule.swap.trees import RunnerError
+from contractcapsule.validate.models import Artifact, Invocation
+from contractcapsule.validate.run_models import digest_bytes
+from tests.integration.test_twin_run import config
+
+IMAGE_ID = "sha256:" + "a" * 64
+CONTAINER_ID = "b" * 64
+VALID_IMAGE = {"Id": IMAGE_ID, "Os": "linux", "Architecture": "arm64"}
+VALID_STATE = {
+    "Running": False,
+    "Status": "exited",
+    "ExitCode": 0,
+    "OOMKilled": False,
+    "Error": "",
+}
+
+
+def _encoded(value: object) -> bytes:
+    return json.dumps(value, separators=(",", ":")).encode()
+
+
+def _stage() -> object:
+    data = b"print('independent cleanup probe')"
+    artifact = Artifact(
+        test_id="entry",
+        path="main.py",
+        kind="behavioral",
+        digest=digest_bytes(data),
+        data=data,
+    )
+    return DockerRunner(config()).run_stage(
+        "sha256:" + "c" * 64,
+        Invocation(test_id="entry", artifact_ids=("entry",), argv=()),
+        (artifact,),
+        {},
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"",
+        b"not-json",
+        b"\xff",
+        _encoded(None),
+        _encoded(False),
+        _encoded(0),
+        _encoded("value"),
+        _encoded({}),
+        _encoded([]),
+        _encoded([None]),
+        _encoded([[]]),
+        _encoded([{}, {}]),
+    ],
+)
+def test_preflight_rejects_malformed_top_level_shapes(monkeypatch, payload):
+    lifecycle = DockerLifecycle(config(image_digest=IMAGE_ID))
+    monkeypatch.setattr(lifecycle, "control", lambda *args, **kwargs: payload)
+
+    with pytest.raises(RunnerError, match="^malformed image inspection$") as raised:
+        lifecycle.preflight()
+
+    assert type(raised.value) is RunnerError
+    assert lifecycle.containers == [] and lifecycle.volumes == []
+
+
+@pytest.mark.parametrize("field", ["Id", "Os", "Architecture"])
+def test_preflight_rejects_each_missing_consumed_field(monkeypatch, field):
+    image = dict(VALID_IMAGE)
+    del image[field]
+    lifecycle = DockerLifecycle(config(image_digest=IMAGE_ID))
+    monkeypatch.setattr(lifecycle, "control", lambda *args, **kwargs: _encoded([image]))
+
+    with pytest.raises(RunnerError, match="^malformed image inspection$"):
+        lifecycle.preflight()
+
+
+@pytest.mark.parametrize("field", ["Id", "Os", "Architecture"])
+@pytest.mark.parametrize("bad_value", [None, False, 0, [], {}])
+def test_preflight_rejects_wrong_consumed_field_types(
+    monkeypatch, field, bad_value
+):
+    image = dict(VALID_IMAGE)
+    image[field] = bad_value
+    lifecycle = DockerLifecycle(config(image_digest=IMAGE_ID))
+    monkeypatch.setattr(lifecycle, "control", lambda *args, **kwargs: _encoded([image]))
+
+    with pytest.raises(RunnerError, match="^malformed image inspection$"):
+        lifecycle.preflight()
+
+
+def test_preflight_accepts_exact_shape_and_separates_identity_mismatch(monkeypatch):
+    lifecycle = DockerLifecycle(config(image_digest=IMAGE_ID))
+    monkeypatch.setattr(
+        lifecycle,
+        "control",
+        lambda *args, **kwargs: _encoded([{**VALID_IMAGE, "Extra": "allowed"}]),
+    )
+    lifecycle.preflight()
+
+    mismatch = DockerLifecycle(config(image_digest=IMAGE_ID))
+    monkeypatch.setattr(
+        mismatch,
+        "control",
+        lambda *args, **kwargs: _encoded([{**VALID_IMAGE, "Id": "sha256:" + "d" * 64}]),
+    )
+    with pytest.raises(RunnerError, match="^image identity/platform mismatch$"):
+        mismatch.preflight()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"",
+        b"not-json",
+        b"\xff",
+        _encoded(None),
+        _encoded(False),
+        _encoded(0),
+        _encoded("value"),
+        _encoded({}),
+        _encoded([]),
+        _encoded([None]),
+        _encoded([[]]),
+        _encoded([{}, {}]),
+        _encoded([{"Id": CONTAINER_ID}]),
+        _encoded([{"Id": CONTAINER_ID, "State": None}]),
+        _encoded([{"Id": CONTAINER_ID, "State": []}]),
+        _encoded([{"Id": "wrong", "State": VALID_STATE}]),
+    ],
+)
+def test_state_rejects_malformed_top_level_and_nested_shapes(monkeypatch, payload):
+    lifecycle = DockerLifecycle(config())
+    monkeypatch.setattr(lifecycle, "control", lambda *args, **kwargs: payload)
+
+    with pytest.raises(RunnerError, match="^malformed container state$") as raised:
+        lifecycle.state(CONTAINER_ID)
+
+    assert type(raised.value) is RunnerError
+
+
+@pytest.mark.parametrize(
+    "field", ["Running", "Status", "ExitCode", "OOMKilled", "Error"]
+)
+def test_state_rejects_each_missing_consumed_field(monkeypatch, field):
+    state = dict(VALID_STATE)
+    del state[field]
+    lifecycle = DockerLifecycle(config())
+    monkeypatch.setattr(
+        lifecycle,
+        "control",
+        lambda *args, **kwargs: _encoded([{"Id": CONTAINER_ID, "State": state}]),
+    )
+
+    with pytest.raises(RunnerError, match="^malformed container state$"):
+        lifecycle.state(CONTAINER_ID)
+
+
+@pytest.mark.parametrize(
+    "field,bad_value",
+    [
+        ("Running", 0),
+        ("Running", None),
+        ("Status", False),
+        ("Status", None),
+        ("ExitCode", False),
+        ("ExitCode", "0"),
+        ("OOMKilled", 0),
+        ("OOMKilled", None),
+        ("Error", False),
+        ("Error", None),
+    ],
+)
+def test_state_rejects_wrong_consumed_field_types(monkeypatch, field, bad_value):
+    state = dict(VALID_STATE)
+    state[field] = bad_value
+    lifecycle = DockerLifecycle(config())
+    monkeypatch.setattr(
+        lifecycle,
+        "control",
+        lambda *args, **kwargs: _encoded([{"Id": CONTAINER_ID, "State": state}]),
+    )
+
+    with pytest.raises(RunnerError, match="^malformed container state$"):
+        lifecycle.state(CONTAINER_ID)
+
+
+def test_state_accepts_all_consumed_fields_with_docker_extras(monkeypatch):
+    lifecycle = DockerLifecycle(config())
+    state = {**VALID_STATE, "FinishedAt": "2026-09-13T00:00:00Z"}
+    monkeypatch.setattr(
+        lifecycle,
+        "control",
+        lambda *args, **kwargs: _encoded(
+            [{"Id": CONTAINER_ID, "State": state, "Config": {}}]
+        ),
+    )
+
+    assert lifecycle.state(CONTAINER_ID) == state
+
+
+def _assert_owned_resources_removed(created: list[str], volumes: list[str]) -> None:
+    remaining = set(
+        checked(["docker", "ps", "-aq", "--no-trunc"]).decode().splitlines()
+    )
+    remaining_volumes = set(
+        checked(["docker", "volume", "ls", "-q"]).decode().splitlines()
+    )
+    assert not set(created).intersection(remaining)
+    assert not set(volumes).intersection(remaining_volumes)
+
+
+def test_malformed_initializer_state_raises_stage_error_and_cleans(monkeypatch):
+    original_control = DockerLifecycle.control
+    original_create = DockerLifecycle.create
+    created: list[str] = []
+    volumes: list[str] = []
+
+    def create(self, *args):
+        container = original_create(self, *args)
+        created.append(container)
+        return container
+
+    def control(self, *args, **kwargs):
+        if args[0:2] == ("volume", "create"):
+            output = original_control(self, *args, **kwargs)
+            volumes.append(output.decode().strip())
+            return output
+        if args[0] == "inspect" and len(created) == 2:
+            return _encoded([{"Id": created[-1], "State": {"Running": False}}])
+        return original_control(self, *args, **kwargs)
+
+    monkeypatch.setattr(DockerLifecycle, "create", create)
+    monkeypatch.setattr(DockerLifecycle, "control", control)
+
+    with pytest.raises(StageError, match="^malformed container state$") as raised:
+        _stage()
+
+    assert raised.value.retained_containers == ()
+    assert raised.value.retained_volumes == ()
+    _assert_owned_resources_removed(created, volumes)
+
+
+def test_malformed_subject_state_blocks_capture_and_cleans(monkeypatch):
+    original_control = DockerLifecycle.control
+    original_create = DockerLifecycle.create
+    created: list[str] = []
+    volumes: list[str] = []
+    inspect_calls = 0
+
+    def create(self, *args):
+        container = original_create(self, *args)
+        created.append(container)
+        return container
+
+    def control(self, *args, **kwargs):
+        nonlocal inspect_calls
+        if args[0:2] == ("volume", "create"):
+            output = original_control(self, *args, **kwargs)
+            volumes.append(output.decode().strip())
+            return output
+        if args[0] == "inspect":
+            inspect_calls += 1
+            if inspect_calls == 2:
+                return _encoded(
+                    [
+                        {
+                            "Id": created[-1],
+                            "State": {
+                                "Running": False,
+                                "Status": "exited",
+                                "ExitCode": 0,
+                                "OOMKilled": False,
+                            },
+                        }
+                    ]
+                )
+        return original_control(self, *args, **kwargs)
+
+    monkeypatch.setattr(DockerLifecycle, "create", create)
+    monkeypatch.setattr(DockerLifecycle, "control", control)
+
+    result = _stage()
+
+    assert result.process.stdout == b"independent cleanup probe\n"
+    assert not result.process.terminated
+    assert result.tree is None and result.snapshot_ns is None
+    assert result.blockers == ("container control or termination uncertain",)
+    assert result.retained_containers == () and result.retained_volumes == ()
+    _assert_owned_resources_removed(created, volumes)

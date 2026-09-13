@@ -1,0 +1,111 @@
+Exit code: 1
+F                                                                    [100%]
+=================================== FAILURES ===================================
+__________ test_deeply_nested_inspection_returns_stable_error[image] ___________
+tests/integration/test_docker_stage.py:324: in test_deeply_nested_inspection_returns_stable_error
+    lifecycle.preflight()
+src/contractcapsule/swap/docker_lifecycle.py:41: in preflight
+    payload = json.loads(self.control("image", "inspect", self.config.image_digest))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/decoder.py:338: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/decoder.py:354: in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+E   RecursionError: maximum recursion depth exceeded while decoding a JSON array from a unicode string
+__________ test_deeply_nested_inspection_returns_stable_error[state] ___________
+tests/integration/test_docker_stage.py:326: in test_deeply_nested_inspection_returns_stable_error
+    lifecycle.state("a" * 64)
+src/contractcapsule/swap/docker_lifecycle.py:151: in state
+    payload = json.loads(self.control("inspect", container))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/decoder.py:338: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/decoder.py:354: in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+E   RecursionError: maximum recursion depth exceeded while decoding a JSON array from a unicode string
+__________ test_deeply_nested_image_stage_reports_preparation_failure __________
+tests/integration/test_docker_stage.py:339: in test_deeply_nested_image_stage_reports_preparation_failure
+    stage("print('must not start')")
+tests/integration/test_docker_stage.py:28: in stage
+    return DockerRunner(settings or config()).run_stage(
+src/contractcapsule/swap/docker_runner.py:74: in run_stage
+    lifecycle.preflight()
+src/contractcapsule/swap/docker_lifecycle.py:41: in preflight
+    payload = json.loads(self.control("image", "inspect", self.config.image_digest))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/decoder.py:338: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/decoder.py:354: in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+E   RecursionError: maximum recursion depth exceeded while decoding a JSON array from a unicode string
+________ test_deeply_nested_state_preserves_failure_and_cleanup[False] _________
+tests/integration/test_docker_stage.py:370: in test_deeply_nested_state_preserves_failure_and_cleanup
+    stage("print('must not start')")
+tests/integration/test_docker_stage.py:28: in stage
+    return DockerRunner(settings or config()).run_stage(
+src/contractcapsule/swap/docker_runner.py:75: in run_stage
+    container = lifecycle.prepare(Path(directory), entry, invocation.argv)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/contractcapsule/swap/docker_lifecycle.py:135: in prepare
+    state = self.state(initializer)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/contractcapsule/swap/docker_lifecycle.py:151: in state
+    payload = json.loads(self.control("inspect", container))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/decoder.py:338: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/decoder.py:354: in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+E   RecursionError: maximum recursion depth exceeded while decoding a JSON array from a unicode string
+_________ test_deeply_nested_state_preserves_failure_and_cleanup[True] _________
+tests/integration/test_docker_stage.py:362: in test_deeply_nested_state_preserves_failure_and_cleanup
+    result = stage("print('actual output')")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_docker_stage.py:28: in stage
+    return DockerRunner(settings or config()).run_stage(
+src/contractcapsule/swap/docker_runner.py:76: in run_stage
+    result = self._execute(subject, container, lifecycle)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/contractcapsule/swap/docker_runner.py:114: in _execute
+    state = lifecycle.state(container)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/contractcapsule/swap/docker_lifecycle.py:151: in state
+    payload = json.loads(self.control("inspect", container))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/decoder.py:338: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/json/decoder.py:354: in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+E   RecursionError: maximum recursion depth exceeded while decoding a JSON array from a unicode string
+=========================== short test summary info ============================
+FAILED tests/integration/test_docker_stage.py::test_deeply_nested_inspection_returns_stable_error[image]
+FAILED tests/integration/test_docker_stage.py::test_deeply_nested_inspection_returns_stable_error[state]
+FAILED tests/integration/test_docker_stage.py::test_deeply_nested_image_stage_reports_preparation_failure
+FAILED tests/integration/test_docker_stage.py::test_deeply_nested_state_preserves_failure_and_cleanup[False]
+FAILED tests/integration/test_docker_stage.py::test_deeply_nested_state_preserves_failure_and_cleanup[True]
+5 failed, 32 deselected in 1.45s

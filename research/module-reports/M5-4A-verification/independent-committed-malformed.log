@@ -1,0 +1,15 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /Users/litmus/Documents/Contract Capsule/.worktrees/m5-validation-swap/.venv/bin/python
+cachedir: /private/tmp/contract-capsule-m5-4a-rereview.pObpKI/cache/pytest/committed
+hypothesis profile 'default'
+rootdir: /private/tmp/contract-capsule-m5-4a-rereview.pObpKI/source
+configfile: pyproject.toml
+plugins: cov-7.1.0, hypothesis-6.164.0
+collecting ... collected 4 items
+
+tests/integration/test_docker_stage.py::test_malformed_image_inspection_fails_closed[[]] PASSED [ 25%]
+tests/integration/test_docker_stage.py::test_malformed_image_inspection_fails_closed[{}] PASSED [ 50%]
+tests/integration/test_docker_stage.py::test_malformed_image_inspection_fails_closed[not-json] PASSED [ 75%]
+tests/integration/test_docker_stage.py::test_malformed_container_state_fails_closed PASSED [100%]
+
+============================== 4 passed in 0.18s ===============================

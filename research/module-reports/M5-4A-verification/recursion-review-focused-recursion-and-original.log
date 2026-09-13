@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /Users/litmus/Documents/Contract Capsule/.worktrees/m5-validation-swap/.venv/bin/python
+cachedir: /private/tmp/contract-capsule-m5-4a-recursion-rereview.W969S3/cache/pytest/focused
+hypothesis profile 'default'
+rootdir: /private/tmp/contract-capsule-m5-4a-recursion-rereview.W969S3/source
+configfile: pyproject.toml
+plugins: cov-7.1.0, hypothesis-6.164.0
+collecting ... collected 37 items / 28 deselected / 9 selected
+
+tests/integration/test_docker_stage.py::test_malformed_image_inspection_fails_closed[[]] PASSED [ 11%]
+tests/integration/test_docker_stage.py::test_malformed_image_inspection_fails_closed[{}] PASSED [ 22%]
+tests/integration/test_docker_stage.py::test_malformed_image_inspection_fails_closed[not-json] PASSED [ 33%]
+tests/integration/test_docker_stage.py::test_malformed_container_state_fails_closed PASSED [ 44%]
+tests/integration/test_docker_stage.py::test_deeply_nested_inspection_returns_stable_error[image] PASSED [ 55%]
+tests/integration/test_docker_stage.py::test_deeply_nested_inspection_returns_stable_error[state] PASSED [ 66%]
+tests/integration/test_docker_stage.py::test_deeply_nested_image_stage_reports_preparation_failure PASSED [ 77%]
+tests/integration/test_docker_stage.py::test_deeply_nested_state_preserves_failure_and_cleanup[False] PASSED [ 88%]
+tests/integration/test_docker_stage.py::test_deeply_nested_state_preserves_failure_and_cleanup[True] PASSED [100%]
+
+======================= 9 passed, 28 deselected in 1.67s =======================

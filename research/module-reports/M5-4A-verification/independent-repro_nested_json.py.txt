@@ -1,0 +1,14 @@
+"""Minimal residual malformed-response reproduction for exact ea68558."""
+
+from contractcapsule.swap.docker_lifecycle import DockerLifecycle
+from tests.integration.test_twin_run import config
+
+payload = b"[" * 10_000 + b"0" + b"]" * 10_000
+
+for method, args in (("preflight", ()), ("state", ("a" * 64,))):
+    lifecycle = DockerLifecycle(config())
+    lifecycle.control = lambda *control_args, **kwargs: payload  # type: ignore[method-assign]
+    try:
+        getattr(lifecycle, method)(*args)
+    except RecursionError as exc:
+        print(method, type(exc).__name__, str(exc))

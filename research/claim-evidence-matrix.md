@@ -1,8 +1,9 @@
 # Claim-Evidence Matrix
 
-Latest 2026-09-13: the M5 worktree has recovered at `ea68558`. M5-1/2/3 remain
-independently reviewed; Docker malformed-response repair re-review and M5-4
-completion are pending. Existing low-level tests do not establish an actual
+Latest 2026-09-13: the M5 worktree has recovered. M5-1/2/3 remain independently
+reviewed; Docker malformed-response repair has scoped independent PASS at
+`d5ad681` (full979 implementation tests; independent9 focused). M5-4B
+completion is pending. Existing low-level tests do not establish an actual
 authenticated twin replacement or activation/rollback. See
 `module-reports/M5-2026-09-13-resume.md`; all later statements below retain
 their historical checkpoint dates. No C3/C4 or empirical RQ result is added.
