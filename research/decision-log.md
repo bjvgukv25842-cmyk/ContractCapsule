@@ -1463,3 +1463,29 @@
 - A complete independent Task4B review is still required. Task4A malformed
   response repair is independently PASS at d5ad681; its report remains separate.
   M5-5/6/7 and M5 exit are not started/approved.
+
+## M5-015 — Task4B Review Requires Two Regression Additions
+
+- Date2026-09-13. Native reviewer m5_4b_review_retry returned REQUEST CHANGES
+  on technical6bdc657/base650fb2c. No Critical finding; two Important coverage
+  gaps: real Git replacement-ref resistance (M5-4B-R1), and actual twin-layer
+  timeout/output-limit negative persistence/replay (M5-4B-R2). Report and exact
+  proposed test-only scopes are in M5-4B-independent-review.md and repair-plan.
+- Fresh main full suite passes1007/211.11s, Task4-focused69/150.80s. Ordinary
+  and no-ignore default/complexity Ruff, Mypy67, offline lock46 and frozen/ADR
+  hashes pass; actual Python source/test inventory109 matches both scanners.
+  The earlier git_tree complexity failure is closed by6bdc657. None of these
+  results is attributed to the reviewer, who did not rerun the full suite.
+- Earlier implementation text overstated resource evidence at the twin layer:
+  stage-level limits were tested, but twin outcome persistence/replay under
+  those failures still requires R2. The report now separates these claims.
+  The former31-case label meant twin/source/attempt/admission, not stage tests.
+- An earlier in-progress command returned1fail/30pass in128.98s at the clock-
+  advance test; isolated rerun passed1/0.82s, then the committed set passed31,
+  the combined Task4 set69 and full1007. The initial transient failure cause
+  was not established; it is not erased or presented as a passing execution.
+- Repair implementation has not begun. The accepted M5 plan explicitly requires
+  itemized approval for new blocking independent findings (line214); ask for
+  R1/R2 approval, then supplement tests and independently re-review before
+  Task5. There is no additional invented author Task4B exit gate. M5 remains
+  incomplete; no Task5/6/7/M6, formal experiment or revised schedule is claimed.

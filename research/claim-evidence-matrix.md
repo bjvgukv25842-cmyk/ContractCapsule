@@ -4,9 +4,10 @@ Latest 2026-09-13: the M5 worktree has recovered. M5-1/2/3 remain independently
 reviewed; Docker malformed-response repair has scoped independent PASS at
 `d5ad681` (full979 implementation tests; independent9 focused). M5-4B
 implementation is committed at `6bdc657` with real low/high pair and negative
-path tests, but complete independent Task4B review is pending. Existing low-level
-tests do not establish an actual
-authenticated twin replacement or activation/rollback. See
+path tests; full1007 implementation tests pass. Independent Task4B review
+requires Git replacement-ref and twin resource-failure regressions (R1/R2).
+Actual reference twin execution is C2 engineering evidence; complete
+replacement/activation/rollback remains unimplemented and unproven. See
 `module-reports/M5-2026-09-13-resume.md`; all later statements below retain
 their historical checkpoint dates. No C3/C4 or empirical RQ result is added.
 
