@@ -1449,3 +1449,17 @@
   M5-4B has no acceptance yet, no Task5/6/7 or M6 work is claimed, and formal
   progress remains5/12. M5 exit and any new independent repair findings retain
   their author gates.
+
+## M5-014 — Task4B Authenticated Twin Implementation Awaiting Review
+
+- Date2026-09-13. Recovered implementation commit6bdc657 completes the
+  approved Task4B composition: same executor with view-only old/new difference,
+  real Git S0, independent view validation, current execution policy, restricted
+  Docker stages, Task3 records and authenticated single-attempt manifest.
+- Real low-risk and high-risk pair paths, precondition aborts, current/revoked/
+  expired approval, source rehash, restart/idempotence, failed persistence and
+  malformed subject paths are covered. Focused suites69 and31 pass; earlier
+  full repository979 pass. This is engineering evidence, not empirical result.
+- A complete independent Task4B review is still required. Task4A malformed
+  response repair is independently PASS at d5ad681; its report remains separate.
+  M5-5/6/7 and M5 exit are not started/approved.
