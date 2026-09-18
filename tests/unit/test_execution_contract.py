@@ -8,7 +8,11 @@ import pytest
 
 from contractcapsule.models import Principal
 from contractcapsule.models.view import TaskContext, ViewBudget
-from contractcapsule.validate.approvals import ApprovalAuthority, ApprovalError
+from contractcapsule.validate.approvals import (
+    ApprovalAuthority,
+    ApprovalError,
+    _signature,
+)
 from contractcapsule.validate.artifacts import LocalArtifactResolver
 from contractcapsule.validate.contracts import (
     ExecutionContractError,
@@ -69,6 +73,42 @@ def test_real_package_and_repeatable_approval(tmp_path: Path) -> None:
     with pytest.raises(ApprovalError):
         verifier.verify_execution(None, bound, now=now)
     assert "synthetic-key" not in repr(authority)
+
+
+def test_approval_expiry_is_parsed_at_fractional_boundary(tmp_path: Path) -> None:
+    bound = parse(M5Fixture.create(tmp_path))
+    issued = datetime(2026, 9, 10, tzinfo=UTC)
+    authority = ApprovalAuthority("synthetic-issuer", b"synthetic-key-32-bytes-for-test!!")
+    approval = authority.issue_execution(
+        bound, issued_at=issued, expires_at=issued + timedelta(minutes=5), synthetic=True
+    )
+    no_fraction = approval.model_copy(
+        update={"expires_at": "2026-09-10T00:05:00Z", "signature": "sha256:" + "0" * 64}
+    )
+    no_fraction = no_fraction.model_copy(
+        update={"signature": _signature(authority._key, no_fraction)}
+    )
+    issued_no_fraction = approval.model_copy(
+        update={
+            "issued_at": "2026-09-10T00:00:00Z",
+            "expires_at": "2026-09-10T00:05:00Z",
+            "signature": "sha256:" + "0" * 64,
+        }
+    )
+    issued_no_fraction = issued_no_fraction.model_copy(
+        update={"signature": _signature(authority._key, issued_no_fraction)}
+    )
+    assert authority.verifier().verify_execution(
+        issued_no_fraction,
+        bound,
+        now=datetime(2026, 9, 10, 0, 0, 0, 1, tzinfo=UTC),
+    ) == issued_no_fraction
+    with pytest.raises(ApprovalError):
+        authority.verifier().verify_execution(
+            no_fraction,
+            bound,
+            now=datetime(2026, 9, 10, 0, 5, 0, 1, tzinfo=UTC),
+        )
 
 
 @pytest.mark.parametrize(

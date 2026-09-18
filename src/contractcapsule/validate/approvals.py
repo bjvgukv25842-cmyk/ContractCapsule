@@ -44,6 +44,16 @@ def _utc(value: datetime) -> str:
     return value.isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
+def _parse_utc(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+    except (TypeError, ValueError):
+        raise ApprovalError("approval rejected") from None
+    if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed):
+        raise ApprovalError("approval rejected")
+    return parsed.astimezone(UTC)
+
+
 def _signature(key: bytes, approval: Approval) -> str:
     payload = approval.model_dump(mode="json", exclude={"signature"})
     data = b"ccs-m5-approval-envelope/1.0.0\x00" + canonical_json_bytes(payload)
@@ -88,13 +98,13 @@ class ApprovalVerifier:
             if type(approval) is not Approval:
                 raise ApprovalError("approval rejected")
             checked = Approval.model_validate(dict(approval.__dict__))
-            current = _utc(now)
+            current = _parse_utc(_utc(now))
             valid = (
                 checked.issuer == self.issuer
                 and checked.domain == domain
                 and checked.operation_id == operation_id
                 and checked.subject == subject
-                and checked.issued_at <= current < checked.expires_at
+                and _parse_utc(checked.issued_at) <= current < _parse_utc(checked.expires_at)
                 and hmac.compare_digest(
                     checked.signature, _signature(self._key, checked)
                 )

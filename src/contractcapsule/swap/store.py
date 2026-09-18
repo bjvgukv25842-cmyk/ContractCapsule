@@ -87,6 +87,20 @@ def _stamp(value: datetime) -> str:
     )
 
 
+def _parse_stamp(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+    except (TypeError, ValueError):
+        raise RuntimeStoreError("timestamp rejected") from None
+    if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed):
+        raise RuntimeStoreError("timestamp rejected")
+    return parsed.astimezone(UTC)
+
+
+def _expired(now: datetime, expires_at: str) -> bool:
+    return _parse_stamp(_stamp(now)) >= _parse_stamp(expires_at)
+
+
 class RuntimeStore:
     """Same-database state owner used by the future swap controller."""
 
@@ -1080,7 +1094,7 @@ class RuntimeStore:
             or digest_bytes(canonical_json_bytes(record.model_dump(mode="json"))) != row[3]
         ):
             raise RuntimeStoreError("prepared record rejected")
-        if not allow_expired and _stamp(self._clock()) >= record.expires_at:
+        if not allow_expired and _expired(self._clock(), record.expires_at):
             raise RuntimeStoreError("prepared record expired")
         return record
 
@@ -1125,7 +1139,7 @@ class RuntimeStore:
             )
         ):
             raise RuntimeStoreError("boundary ticket rejected")
-        if _stamp(self._clock()) >= ticket.expires_at:
+        if _expired(self._clock(), ticket.expires_at):
             raise RuntimeStoreError("boundary ticket expired")
         if (
             row["action_state"] != "IDLE"
@@ -1339,7 +1353,7 @@ class RuntimeStore:
             replay = self._find_activation_replay(db, scope, record)
             if replay is not None:
                 return replay
-            if _stamp(self._clock()) >= record.expires_at:
+            if _expired(self._clock(), record.expires_at):
                 raise RuntimeStoreError("prepared record expired")
             if record.old_binding.digest != ActiveBinding.model_validate_json(row["active_jcs"]).digest:
                 raise RuntimeStoreError("prepared old binding mismatch")

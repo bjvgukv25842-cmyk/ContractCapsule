@@ -248,6 +248,68 @@ def test_consumed_ticket_row_tampering_is_rejected(tmp_path: Path):
         store.consume_boundary(current, ticket)
 
 
+def test_rfc3339_ticket_expiry_is_parsed_at_fractional_boundary(tmp_path: Path):
+    current_time = [datetime(2026, 9, 18, tzinfo=UTC)]
+    store = make_store(tmp_path / "registry.db", clock=lambda: current_time[0])
+    current = scope()
+    store.initialize(current, binding(), store.issue_bootstrap(current, binding()))
+    lease = store.begin_action(current, "operation-1", "sha256:" + "a" * 64)
+    store.end_action(current, lease)
+    ticket = store.reserve_boundary(current, "operation-1", 0, ttl=timedelta(seconds=1))
+    normalized = ticket.model_copy(update={"expires_at": "2026-09-18T00:00:01Z"})
+    normalized = normalized.model_copy(
+        update={"signature": store._ticket_signature(normalized)}
+    )
+    with sqlite3.connect(store.database_path) as db:
+        db.execute(
+            "UPDATE m5_runtime_tickets SET expires_at=?,signature=?,record_signature=? "
+            "WHERE ticket_id=?",
+            (
+                normalized.expires_at,
+                bytes.fromhex(normalized.signature.removeprefix("sha256:")),
+                store._ticket_record_signature(normalized, False),
+                normalized.ticket_id,
+            ),
+        )
+    current_time[0] = datetime(2026, 9, 18, 0, 0, 1, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="expired"):
+        store.consume_boundary(current, normalized)
+
+
+def test_rfc3339_prepared_expiry_blocks_activation_after_fractional_boundary(
+    tmp_path: Path,
+):
+    current_time = [datetime(2026, 9, 18, tzinfo=UTC)]
+    store = make_store(tmp_path / "registry.db", clock=lambda: current_time[0])
+    current = scope()
+    old = binding()
+    store.initialize(current, old, store.issue_bootstrap(current, old))
+    lease = store.begin_action(current, "operation-1", "sha256:" + "a" * 64)
+    store.end_action(current, lease)
+    record = PreparedReplacement(
+        prepared_id="prepared-expiry",
+        scope_digest=current.digest,
+        operation_id="operation-1",
+        request_digest="sha256:" + "a" * 64,
+        old_binding=old,
+        new_binding=binding("2.0.0", 1),
+        evidence_digest="sha256:" + "b" * 64,
+        expires_at="2026-09-18T00:00:01Z",
+        payload=b"evidence",
+    )
+    store.save_prepared(record)
+    ticket = store.reserve_boundary(current, "operation-1", 0, ttl=timedelta(minutes=1))
+    current_time[0] = datetime(2026, 9, 18, 0, 0, 1, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="expired"):
+        store.activate_prepared(
+            current,
+            record.prepared_id,
+            ticket,
+            "sha256:" + "c" * 64,
+            activation_validator=lambda _record, _approval: True,
+        )
+
+
 def test_runtime_composition_cannot_be_mutated_normally(tmp_path: Path):
     store = make_store(tmp_path / "registry.db")
     with pytest.raises(AttributeError, match="immutable"):
