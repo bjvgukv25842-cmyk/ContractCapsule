@@ -161,3 +161,47 @@ def test_failed_manifest_persistence_keeps_reserved_attempt_and_blocks_retry(tmp
     row = fixture.attempts.get(fixture.runner._attempt_key(fixture.bound))
     assert row.state == 'RUNNING' and row.manifest is None
     assert isinstance(fixture.runner.run(fixture.approval), TwinFailure)
+
+
+@pytest.mark.parametrize(
+    ("program", "profile_change", "flag"),
+    [
+        (
+            b"import time\ntime.sleep(30)\n",
+            lambda profile: profile["runner"].update(timeout_seconds=1),
+            "timed_out",
+        ),
+        (
+            b"while True:\n print('x' * 4096, flush=True)\n",
+            lambda profile: profile["runner"].update(
+                stdout_limit_bytes=256, timeout_seconds=10
+            ),
+            "output_limited",
+        ),
+    ],
+)
+def test_resource_failure_is_persisted_and_replay_does_not_rerun(
+    tmp_path, program, profile_change, flag
+):
+    fixture = TwinFixture(
+        tmp_path,
+        program_changes={"executor": program},
+        profile_change=profile_change,
+    )
+    outcome = fixture.runner.run(fixture.approval)
+    assert isinstance(outcome, TwinOutcome), outcome
+    assert not outcome.valid
+    assert outcome.manifest.state in {"FAILED", "UNCERTAIN"}
+    resource_stages = [
+        stage
+        for stage in outcome.manifest.stages
+        if stage.stage_id == "executor" and stage.process is not None
+    ]
+    assert resource_stages
+    assert any(getattr(stage.process, flag) for stage in resource_stages)
+    assert all(stage.process.terminated for stage in resource_stages)
+    fixture.runner.verify_outcome(outcome)
+
+    row = fixture.attempts.get(fixture.runner._attempt_key(fixture.bound))
+    assert row is not None and row.state == "COMPLETE" and row.manifest is not None
+    assert fixture.runner.run(fixture.approval) == outcome

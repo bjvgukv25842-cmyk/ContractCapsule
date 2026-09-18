@@ -44,6 +44,43 @@ def test_git_tree_reads_locked_commit_not_dirty_worktree(tmp_path: Path):
     assert dict(tree.files)["src.py"] == b"committed"
 
 
+def test_git_tree_ignores_replacement_ref_for_locked_commit(tmp_path: Path):
+    """A replace ref must not change the bytes bound to the locked commit."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.email", "test@example.invalid"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.name", "test"], check=True
+    )
+    source = tmp_path / "src.py"
+    source.write_text("locked\n")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "src.py"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "locked"], check=True)
+    locked = subprocess.check_output(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"], text=True
+    ).strip()
+    source.write_text("replacement\n")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "src.py"], check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "-qm", "replacement"], check=True
+    )
+    replacement = subprocess.check_output(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"], text=True
+    ).strip()
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "replace", locked, replacement], check=True
+    )
+
+    replaced = subprocess.check_output(
+        ["git", "-C", str(tmp_path), "show", f"{locked}:src.py"], text=True
+    )
+    assert replaced == "replacement\n"
+    tree = git_tree(tmp_path, "sha1:" + locked, config())
+    assert dict(tree.files)["src.py"] == b"locked\n"
+
+
 def test_git_tree_rejects_symlink_and_missing_commit(tmp_path: Path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     with pytest.raises(RunnerError):
