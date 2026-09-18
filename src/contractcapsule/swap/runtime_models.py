@@ -200,6 +200,14 @@ class RollbackReceipt(StrictFrozenModel):
     applied: bool = True
     signature: Digest
 
+    @model_validator(mode="after")
+    def _receipt_generations(self) -> RollbackReceipt:
+        if self.generation_after != self.generation_before + 1:
+            raise ValueError("rollback generation must advance exactly once")
+        if self.restored_binding.generation != self.generation_after:
+            raise ValueError("rollback binding generation mismatch")
+        return self
+
     @property
     def digest(self) -> Digest:
         return _digest(self.model_dump(mode="json"))
