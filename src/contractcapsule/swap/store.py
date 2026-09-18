@@ -228,117 +228,121 @@ class RuntimeStore:
                 BEGIN SELECT RAISE(ABORT, 'immutable runtime audit'); END;
                 """
             )
-            columns = {
-                row[1] for row in db.execute("PRAGMA table_info(m5_runtime_actions)")
-            }
-            if "outcome" not in columns:
-                db.execute("ALTER TABLE m5_runtime_actions ADD COLUMN outcome BLOB")
-            action_columns = {
-                row[1] for row in db.execute("PRAGMA table_info(m5_runtime_actions)")
-            }
-            if "action_signature" not in action_columns:
-                db.execute(
-                    "ALTER TABLE m5_runtime_actions ADD COLUMN action_signature BLOB"
+            self._migrate_actions(db)
+            self._migrate_scopes(db)
+            self._migrate_tickets(db)
+
+    def _migrate_actions(self, db: sqlite3.Connection) -> None:
+        columns = {
+            row[1] for row in db.execute("PRAGMA table_info(m5_runtime_actions)")
+        }
+        if "outcome" not in columns:
+            db.execute("ALTER TABLE m5_runtime_actions ADD COLUMN outcome BLOB")
+        columns = {
+            row[1] for row in db.execute("PRAGMA table_info(m5_runtime_actions)")
+        }
+        if "action_signature" not in columns:
+            db.execute(
+                "ALTER TABLE m5_runtime_actions ADD COLUMN action_signature BLOB"
+            )
+            for legacy in db.execute(
+                "SELECT scope_digest,operation_id,request_digest,action_epoch,"
+                "state,outcome_digest,outcome FROM m5_runtime_actions"
+            ).fetchall():
+                signature = self._action_signature(
+                    scope_digest=legacy[0],
+                    operation_id=legacy[1],
+                    request_digest=legacy[2],
+                    action_epoch=legacy[3],
+                    state=legacy[4],
+                    outcome_digest=legacy[5],
+                    outcome=legacy[6],
                 )
-                legacy_actions = db.execute(
-                    "SELECT scope_digest,operation_id,request_digest,action_epoch,"
-                    "state,outcome_digest,outcome FROM m5_runtime_actions"
-                ).fetchall()
-                for legacy in legacy_actions:
-                    action_signature = self._action_signature(
-                        scope_digest=legacy[0],
-                        operation_id=legacy[1],
-                        request_digest=legacy[2],
-                        action_epoch=legacy[3],
-                        state=legacy[4],
-                        outcome_digest=legacy[5],
-                        outcome=legacy[6],
-                    )
-                    db.execute(
-                        "UPDATE m5_runtime_actions SET action_signature=? "
-                        "WHERE scope_digest=? AND operation_id=?",
-                        (action_signature, legacy[0], legacy[1]),
-                    )
-            missing_action_signature = db.execute(
-                "SELECT 1 FROM m5_runtime_actions "
-                "WHERE action_signature IS NULL LIMIT 1"
-            ).fetchone()
-            if missing_action_signature is not None:
-                raise RuntimeStoreError("runtime action integrity unavailable")
-            scope_columns = {
-                row[1] for row in db.execute("PRAGMA table_info(m5_runtime_scopes)")
-            }
-            if "state_signature" not in scope_columns:
                 db.execute(
-                    "ALTER TABLE m5_runtime_scopes ADD COLUMN state_signature BLOB"
+                    "UPDATE m5_runtime_actions SET action_signature=? "
+                    "WHERE scope_digest=? AND operation_id=?",
+                    (signature, legacy[0], legacy[1]),
                 )
-                legacy_states = db.execute(
-                    "SELECT scope_digest,scope_jcs,active_jcs,generation,"
-                    "action_state,action_epoch,current_operation_id "
-                    "FROM m5_runtime_scopes"
-                ).fetchall()
-                for legacy in legacy_states:
-                    state_signature = self._state_signature(
-                        scope_digest=legacy[0],
-                        scope_jcs=legacy[1],
-                        active_jcs=legacy[2],
-                        generation=legacy[3],
-                        action_state=legacy[4],
-                        action_epoch=legacy[5],
-                        current_operation_id=legacy[6],
-                    )
-                    db.execute(
-                        "UPDATE m5_runtime_scopes SET state_signature=? "
-                        "WHERE scope_digest=?",
-                        (state_signature, legacy[0]),
-                    )
-            missing_state_signature = db.execute(
-                "SELECT 1 FROM m5_runtime_scopes "
-                "WHERE state_signature IS NULL LIMIT 1"
-            ).fetchone()
-            if missing_state_signature is not None:
-                raise RuntimeStoreError("runtime state integrity unavailable")
-            ticket_columns = {
-                row[1] for row in db.execute("PRAGMA table_info(m5_runtime_tickets)")
-            }
-            if "record_signature" not in ticket_columns:
+        if db.execute(
+            "SELECT 1 FROM m5_runtime_actions "
+            "WHERE action_signature IS NULL LIMIT 1"
+        ).fetchone():
+            raise RuntimeStoreError("runtime action integrity unavailable")
+
+    def _migrate_scopes(self, db: sqlite3.Connection) -> None:
+        columns = {
+            row[1] for row in db.execute("PRAGMA table_info(m5_runtime_scopes)")
+        }
+        if "state_signature" not in columns:
+            db.execute(
+                "ALTER TABLE m5_runtime_scopes ADD COLUMN state_signature BLOB"
+            )
+            for legacy in db.execute(
+                "SELECT scope_digest,scope_jcs,active_jcs,generation,"
+                "action_state,action_epoch,current_operation_id "
+                "FROM m5_runtime_scopes"
+            ).fetchall():
+                signature = self._state_signature(
+                    scope_digest=legacy[0],
+                    scope_jcs=legacy[1],
+                    active_jcs=legacy[2],
+                    generation=legacy[3],
+                    action_state=legacy[4],
+                    action_epoch=legacy[5],
+                    current_operation_id=legacy[6],
+                )
                 db.execute(
-                    "ALTER TABLE m5_runtime_tickets ADD COLUMN record_signature BLOB"
+                    "UPDATE m5_runtime_scopes SET state_signature=? "
+                    "WHERE scope_digest=?",
+                    (signature, legacy[0]),
                 )
-                legacy_rows = db.execute(
-                    "SELECT ticket_id,scope_digest,expected_generation,action_epoch,"
-                    "operation_id,expires_at,signature,consumed "
-                    "FROM m5_runtime_tickets"
-                ).fetchall()
-                for legacy in legacy_rows:
-                    if type(legacy[6]) is not bytes:
-                        raise RuntimeStoreError("legacy boundary ticket rejected")
-                    ticket = BoundaryTicket(
-                        ticket_id=legacy[0],
-                        scope_digest=legacy[1],
-                        expected_generation=legacy[2],
-                        action_epoch=legacy[3],
-                        operation_id=legacy[4],
-                        expires_at=legacy[5],
-                        signature="sha256:" + legacy[6].hex(),
-                    )
-                    if not hmac.compare_digest(
-                        ticket.signature, self._ticket_signature(ticket)
-                    ):
-                        raise RuntimeStoreError("legacy boundary ticket rejected")
-                    record_signature = self._ticket_record_signature(
-                        ticket, bool(legacy[7])
-                    )
-                    db.execute(
-                        "UPDATE m5_runtime_tickets SET record_signature=? "
-                        "WHERE ticket_id=?",
-                        (record_signature, legacy[0]),
-                    )
-            missing_record = db.execute(
-                "SELECT 1 FROM m5_runtime_tickets WHERE record_signature IS NULL LIMIT 1"
-            ).fetchone()
-            if missing_record is not None:
-                raise RuntimeStoreError("boundary ticket record integrity unavailable")
+        if db.execute(
+            "SELECT 1 FROM m5_runtime_scopes "
+            "WHERE state_signature IS NULL LIMIT 1"
+        ).fetchone():
+            raise RuntimeStoreError("runtime state integrity unavailable")
+
+    def _migrate_tickets(self, db: sqlite3.Connection) -> None:
+        columns = {
+            row[1] for row in db.execute("PRAGMA table_info(m5_runtime_tickets)")
+        }
+        if "record_signature" not in columns:
+            db.execute(
+                "ALTER TABLE m5_runtime_tickets ADD COLUMN record_signature BLOB"
+            )
+            for legacy in db.execute(
+                "SELECT ticket_id,scope_digest,expected_generation,action_epoch,"
+                "operation_id,expires_at,signature,consumed "
+                "FROM m5_runtime_tickets"
+            ).fetchall():
+                if type(legacy[6]) is not bytes:
+                    raise RuntimeStoreError("legacy boundary ticket rejected")
+                ticket = BoundaryTicket(
+                    ticket_id=legacy[0],
+                    scope_digest=legacy[1],
+                    expected_generation=legacy[2],
+                    action_epoch=legacy[3],
+                    operation_id=legacy[4],
+                    expires_at=legacy[5],
+                    signature="sha256:" + legacy[6].hex(),
+                )
+                if not hmac.compare_digest(
+                    ticket.signature, self._ticket_signature(ticket)
+                ):
+                    raise RuntimeStoreError("legacy boundary ticket rejected")
+                db.execute(
+                    "UPDATE m5_runtime_tickets SET record_signature=? "
+                    "WHERE ticket_id=?",
+                    (
+                        self._ticket_record_signature(ticket, bool(legacy[7])),
+                        legacy[0],
+                    ),
+                )
+        if db.execute(
+            "SELECT 1 FROM m5_runtime_tickets "
+            "WHERE record_signature IS NULL LIMIT 1"
+        ).fetchone():
+            raise RuntimeStoreError("boundary ticket record integrity unavailable")
 
     @staticmethod
     def _scope_digest(scope: RuntimeScope) -> str:
@@ -1192,6 +1196,127 @@ class RuntimeStore:
             raise RuntimeStoreError("receipt rejected")
         return row[4], model
 
+    def _find_activation_replay(
+        self,
+        db: sqlite3.Connection,
+        scope: RuntimeScope,
+        record: PreparedReplacement,
+    ) -> ActivationReceipt | None:
+        scope_digest = self._scope_digest(scope)
+        existing = db.execute(
+            "SELECT receipt_id FROM m5_runtime_receipts "
+            "WHERE scope_digest=? AND operation_id=? AND kind='ACTIVATE'",
+            (scope_digest, record.operation_id),
+        ).fetchone()
+        if existing is None:
+            return None
+        _kind, receipt = self._load_receipt_db(db, scope, existing[0])
+        if (
+            not isinstance(receipt, ActivationReceipt)
+            or receipt.request_digest != record.request_digest
+        ):
+            raise ReplayConflict("activation operation is bound to another request")
+        if receipt.prepared_id != record.prepared_id:
+            raise ReplayConflict("activation operation is bound to another preparation")
+        return receipt
+
+    @staticmethod
+    def _authorize_activation(
+        record: PreparedReplacement,
+        approval_digest: str,
+        validator: Callable[[PreparedReplacement, str], bool] | None,
+    ) -> None:
+        if validator is None:
+            raise RuntimeStoreError("activation authority unavailable")
+        try:
+            authorized = validator(record, approval_digest)
+        except Exception:  # noqa: BLE001 - authorization failure is a denial.
+            authorized = False
+        if authorized is not True:
+            raise RuntimeStoreError("activation authorization rejected")
+
+    def _commit_activation(
+        self,
+        db: sqlite3.Connection,
+        scope_digest: str,
+        row: sqlite3.Row,
+        record: PreparedReplacement,
+        ticket: BoundaryTicket,
+        approval_digest: str,
+    ) -> ActivationReceipt:
+        old = ActiveBinding.model_validate_json(row["active_jcs"])
+        unsigned = ActivationReceipt(
+            receipt_id=str(uuid.uuid4()),
+            scope_digest=scope_digest,
+            operation_id=record.operation_id,
+            prepared_id=record.prepared_id,
+            ticket_id=ticket.ticket_id,
+            request_digest=record.request_digest,
+            old_binding=old,
+            new_binding=record.new_binding,
+            generation_before=row["generation"],
+            generation_after=record.new_binding.generation,
+            approval_digest=approval_digest,
+            signature="sha256:" + "0" * 64,
+        )
+        receipt = unsigned.model_copy(
+            update={
+                "signature": self._receipt_signature(
+                    "ACTIVATE", unsigned.model_dump(mode="json", exclude={"signature"})
+                )
+            }
+        )
+        payload = canonical_json_bytes(receipt.model_dump(mode="json"))
+        new_active_jcs = canonical_json_bytes(record.new_binding.model_dump(mode="json"))
+        pointer_update = db.execute(
+            "UPDATE m5_runtime_scopes SET active_jcs=?, generation=?, "
+            "state_signature=?, updated_at=? WHERE scope_digest=? AND generation=?",
+            (
+                new_active_jcs,
+                record.new_binding.generation,
+                self._state_signature(
+                    scope_digest=scope_digest,
+                    scope_jcs=row["scope_jcs"],
+                    active_jcs=new_active_jcs,
+                    generation=record.new_binding.generation,
+                    action_state="IDLE",
+                    action_epoch=row["action_epoch"],
+                    current_operation_id=None,
+                ),
+                _stamp(self._clock()),
+                scope_digest,
+                row["generation"],
+            ),
+        )
+        if pointer_update.rowcount != 1:
+            raise RuntimeStoreError("activation compare-and-swap failed")
+        ticket_update = db.execute(
+            "UPDATE m5_runtime_tickets SET consumed=1,record_signature=? "
+            "WHERE ticket_id=? AND consumed=0 AND record_signature=?",
+            (
+                self._ticket_record_signature(ticket, True),
+                ticket.ticket_id,
+                self._ticket_record_signature(ticket, False),
+            ),
+        )
+        if ticket_update.rowcount != 1:
+            raise RuntimeStoreError("boundary ticket consumption failed")
+        db.execute(
+            "INSERT INTO m5_runtime_receipts VALUES (?,?,?,?,?,?,?,?)",
+            (
+                receipt.receipt_id,
+                scope_digest,
+                record.operation_id,
+                "ACTIVATE",
+                record.request_digest,
+                payload,
+                bytes.fromhex(receipt.signature.removeprefix("sha256:")),
+                _stamp(self._clock()),
+            ),
+        )
+        self._audit(db, scope_digest, "ACTIVATE", {"receipt_id": receipt.receipt_id})
+        return receipt
+
     @_safe_db_call
     def activate_prepared(
         self,
@@ -1211,17 +1336,9 @@ class RuntimeStore:
             record = self._load_prepared_db(
                 db, scope, prepared_id, allow_expired=True
             )
-            existing = db.execute(
-                "SELECT receipt_id FROM m5_runtime_receipts WHERE scope_digest=? AND operation_id=? AND kind='ACTIVATE'",
-                (scope_digest, record.operation_id),
-            ).fetchone()
-            if existing is not None:
-                _kind, receipt = self._load_receipt_db(db, scope, existing[0])
-                if not isinstance(receipt, ActivationReceipt) or receipt.request_digest != record.request_digest:
-                    raise ReplayConflict("activation operation is bound to another request")
-                if receipt.prepared_id != record.prepared_id:
-                    raise ReplayConflict("activation operation is bound to another preparation")
-                return receipt
+            replay = self._find_activation_replay(db, scope, record)
+            if replay is not None:
+                return replay
             if _stamp(self._clock()) >= record.expires_at:
                 raise RuntimeStoreError("prepared record expired")
             if record.old_binding.digest != ActiveBinding.model_validate_json(row["active_jcs"]).digest:
@@ -1234,90 +1351,12 @@ class RuntimeStore:
                 expected_operation_id=record.operation_id,
                 expected_request_digest=record.request_digest,
             )
-            old = ActiveBinding.model_validate_json(row["active_jcs"])
             if record.new_binding.generation != row["generation"] + 1:
                 raise GenerationMismatch("prepared generation mismatch")
-            if activation_validator is None:
-                raise RuntimeStoreError("activation authority unavailable")
-            try:
-                authorized = activation_validator(record, approval_digest)
-            except Exception:  # noqa: BLE001 - authorization failure is a denial.
-                authorized = False
-            if authorized is not True:
-                raise RuntimeStoreError("activation authorization rejected")
-            unsigned = ActivationReceipt(
-                receipt_id=str(uuid.uuid4()),
-                scope_digest=scope_digest,
-                operation_id=record.operation_id,
-                prepared_id=record.prepared_id,
-                ticket_id=ticket.ticket_id,
-                request_digest=record.request_digest,
-                old_binding=old,
-                new_binding=record.new_binding,
-                generation_before=row["generation"],
-                generation_after=record.new_binding.generation,
-                approval_digest=approval_digest,
-                signature="sha256:" + "0" * 64,
+            self._authorize_activation(record, approval_digest, activation_validator)
+            return self._commit_activation(
+                db, scope_digest, row, record, ticket, approval_digest
             )
-            receipt = unsigned.model_copy(
-                update={
-                    "signature": self._receipt_signature(
-                        "ACTIVATE", unsigned.model_dump(mode="json", exclude={"signature"})
-                    )
-                }
-            )
-            payload = canonical_json_bytes(receipt.model_dump(mode="json"))
-            new_active_jcs = canonical_json_bytes(
-                record.new_binding.model_dump(mode="json")
-            )
-            pointer_update = db.execute(
-                "UPDATE m5_runtime_scopes SET active_jcs=?, generation=?, "
-                "state_signature=?, updated_at=? WHERE scope_digest=? AND generation=?",
-                (
-                    new_active_jcs,
-                    record.new_binding.generation,
-                    self._state_signature(
-                        scope_digest=scope_digest,
-                        scope_jcs=row["scope_jcs"],
-                        active_jcs=new_active_jcs,
-                        generation=record.new_binding.generation,
-                        action_state="IDLE",
-                        action_epoch=row["action_epoch"],
-                        current_operation_id=None,
-                    ),
-                    _stamp(self._clock()),
-                    scope_digest,
-                    row["generation"],
-                ),
-            )
-            if pointer_update.rowcount != 1:
-                raise RuntimeStoreError("activation compare-and-swap failed")
-            ticket_update = db.execute(
-                "UPDATE m5_runtime_tickets SET consumed=1,record_signature=? "
-                "WHERE ticket_id=? AND consumed=0 AND record_signature=?",
-                (
-                    self._ticket_record_signature(ticket, True),
-                    ticket.ticket_id,
-                    self._ticket_record_signature(ticket, False),
-                ),
-            )
-            if ticket_update.rowcount != 1:
-                raise RuntimeStoreError("boundary ticket consumption failed")
-            db.execute(
-                "INSERT INTO m5_runtime_receipts VALUES (?,?,?,?,?,?,?,?)",
-                (
-                    receipt.receipt_id,
-                    scope_digest,
-                    record.operation_id,
-                    "ACTIVATE",
-                    record.request_digest,
-                    payload,
-                    bytes.fromhex(receipt.signature.removeprefix("sha256:")),
-                    _stamp(self._clock()),
-                ),
-            )
-            self._audit(db, scope_digest, "ACTIVATE", {"receipt_id": receipt.receipt_id})
-            return receipt
 
     @_safe_db_call
     def get_receipt(
