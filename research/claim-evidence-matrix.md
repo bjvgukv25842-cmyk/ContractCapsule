@@ -211,3 +211,23 @@ tests, not benchmark observations or empirical TER/PIP/BSR, C2-C5, baseline
 advantage or cross-agent results. M3's technical reaudit and human exit gate
 are approved; M4 is authorized to start after this governance record, with no
 M4 implementation result claimed here.
+
+## M5 Engineering Evidence Pointer (2026-09-18)
+
+The M5-5/M5-6/M5-7 implementation and final independent audit are recorded in
+`research/module-reports/M5-2026-09-18-final-audit.md`. The evidence is bounded
+to mechanism and safety behavior; it is not benchmark truth or an empirical
+RQ3 result.
+
+| Claim/question | Engineering support now available | Still missing |
+|---|---|---|
+| C1 replacement relation | Independent deterministic old/new Docker twin, separate TER/PIP/BSR records, authenticated prepared evidence, atomic activation and guarded rollback | Human-reviewed benchmark tasks and empirical replacement outcomes |
+| C2 mechanism | Authenticated C-zone store, serialized action boundary, generation/CAS pointer updates, durable receipts, restart replay, and final 1047-test regression | M6 adapter path and the G1 real-Agent vertical slice |
+| C5 provenance/safety | Evidence payload and view/input digests are bound into prepared records and receipts; no-fraction expiry, ticket reuse, audit failure, revocation, and resource-failure regressions are retained | External replication, artifact packaging, and submission-time audit |
+| RQ1 token/cost | M4 token instrumentation remains available; M5 records execution/activation evidence without inventing provider cost | Prospective agent-task measurements under the frozen experiment protocol |
+| RQ2 selection/traceability | M4 manifests and M5 run/receipt bindings preserve source and view identities through the swap | Human corpus adjudication and critical-atom recall measurements |
+| RQ3 behavior | Real fixture-level old/new paired execution and separate target/invariant/spillover checks | M7-M10 benchmark, baselines, and statistical analysis |
+
+M5 technical status is PASS after the exact final independent audit. The author
+exit decision is kept distinct from the engineering evidence, and no M6 code or
+formal experiment is counted in this update.

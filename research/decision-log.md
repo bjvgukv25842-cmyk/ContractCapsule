@@ -1489,3 +1489,31 @@
   R1/R2 approval, then supplement tests and independently re-review before
   Task5. There is no additional invented author Task4B exit gate. M5 remains
   incomplete; no Task5/6/7/M6, formal experiment or revised schedule is claimed.
+
+## M5-016 - M5-5/M5-6/M5-7 Technical Closure and F1 Repair (2026-09-18)
+
+- The isolated M5 candidate is `3de72974afd0f42cfe1d2f932ee9a17645780eea`
+  on `codex/m5-validation-swap`. It contains the approved M5-4B regression
+  additions, authenticated runtime store and safe boundary, guarded atomic
+  activation/rollback, and a real deterministic reference path from Docker
+  twin validation through activation, restart, and rollback.
+- Independent review of prior `5ccceab` reproduced M5-F1/P1: comparing RFC3339
+  strings accepted a fractional current time after a valid no-fraction expiry.
+  The repair in `3de7297` parses aware UTC datetimes for ticket, prepared
+  record, and approval expiry checks. Three RED-to-GREEN regressions cover the
+  ticket, activation, and approval boundaries. No public interface, frozen
+  file, schema, dependency, or Registry publication behavior changed.
+- Exact candidate verification: frozen security command14 passed; the same
+  command plus M5-7 integration15 passed; M5-4B twin replacement/resource
+  regressions24 passed; full repository1047 passed; formal/schema/ledger
+  checks150 passed. Ruff (ordinary and no-ignore), C901/PLR complexity in both
+  modes, Mypy71, offline lock46, build/wheel smoke, frozen hashes, protected
+  files, and whitespace checks all passed. The Python inventory is118 files
+  in both lint modes and on disk.
+- The final native read-only audit of exact `3de7297` is PASS with no
+  unresolved blocking finding. Historical REQUEST CHANGES, failed mutations,
+  and the F1 reproduction remain preserved. These are engineering results;
+  no formal experiment, benchmark truth, or cross-agent claim is asserted.
+- M5-5/M5-6/M5-7 technical status is PASS. The original G1/G2/G3 dates remain
+  missed and were not backfilled. Formal M5 exit authorization is recorded as
+  a separate governance decision; M6 implementation has not begun.
