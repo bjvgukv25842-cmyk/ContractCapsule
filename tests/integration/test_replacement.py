@@ -121,6 +121,7 @@ def test_high_risk_activation_requires_bound_activation_approval(tmp_path: Path)
         current_scope,
         validator=lambda _record: True,
         approval_verifier=authority.verifier(),
+        clock=lambda: datetime(2026, 9, 18, 12, tzinfo=UTC),
     )
     controller.prepare(record)
     receipt = controller.activate(record.prepared_id, ticket, approval)

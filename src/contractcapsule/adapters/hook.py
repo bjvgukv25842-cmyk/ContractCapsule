@@ -81,33 +81,32 @@ class PreToolHook:
         if type(self.key) is not bytes or len(self.key) < 32 or not callable(self.clock):
             raise ValueError("hook configuration rejected")
 
-    def decide(self, request: Mapping[str, object]) -> dict[str, str]:
+    @staticmethod
+    def _request_parts(request: Mapping[str, object]) -> tuple[str, str, str] | None:
         if not isinstance(request, Mapping) or any(
             field not in request for field in ("tool_name", "risk_class", "operation_id")
         ):
-            return {"decision": "deny", "code": "HOOK_INPUT_INVALID"}
+            return None
+        tool_name = request["tool_name"]
+        risk_class = request["risk_class"]
+        operation_id = request["operation_id"]
+        if (
+            type(tool_name) is not str
+            or type(risk_class) is not str
+            or type(operation_id) is not str
+            or not tool_name
+            or not operation_id
+            or risk_class not in {"low", "medium", "high", "critical"}
+        ):
+            return None
+        return tool_name, risk_class, operation_id
+
+    def _receipt_decision(
+        self, raw_receipt: object, operation_id: str
+    ) -> dict[str, str]:
+        if not isinstance(raw_receipt, Mapping):
+            return {"decision": "deny", "code": "VIEW_RECEIPT_REQUIRED"}
         try:
-            tool_name = request["tool_name"]
-            risk_class = request["risk_class"]
-            operation_id = request["operation_id"]
-            if (
-                type(tool_name) is not str
-                or type(risk_class) is not str
-                or type(operation_id) is not str
-                or not tool_name
-                or not operation_id
-                or risk_class not in {"low", "medium", "high", "critical"}
-            ):
-                return {"decision": "deny", "code": "HOOK_INPUT_INVALID"}
-            requires_receipt = tool_name in self.high_risk_tools or risk_class in {
-                "high",
-                "critical",
-            }
-            if not requires_receipt:
-                return {"decision": "allow"}
-            raw_receipt = request.get("view_receipt")
-            if not isinstance(raw_receipt, Mapping):
-                return {"decision": "deny", "code": "VIEW_RECEIPT_REQUIRED"}
             receipt = HookReceipt.model_validate(raw_receipt)
             if receipt.operation_id != operation_id:
                 return {"decision": "deny", "code": "OPERATION_MISMATCH"}
@@ -118,6 +117,18 @@ class PreToolHook:
             return {"decision": "allow"}
         except Exception:  # noqa: BLE001 - hook failures are always denials.
             return {"decision": "deny", "code": "VIEW_RECEIPT_INVALID"}
+
+    def decide(self, request: Mapping[str, object]) -> dict[str, str]:
+        parts = self._request_parts(request)
+        if parts is None:
+            return {"decision": "deny", "code": "HOOK_INPUT_INVALID"}
+        tool_name, risk_class, operation_id = parts
+        if tool_name not in self.high_risk_tools and risk_class not in {
+            "high",
+            "critical",
+        }:
+            return {"decision": "allow"}
+        return self._receipt_decision(request.get("view_receipt"), operation_id)
 
 
 def _stamp(value: datetime) -> str:

@@ -329,7 +329,10 @@ def test_malformed_clock_and_ttl_fail_closed(tmp_path: Path):
 
 
 def test_prepared_record_is_authenticated_and_reloaded(tmp_path: Path):
-    store = make_store(tmp_path / "registry.db")
+    store = make_store(
+        tmp_path / "registry.db",
+        clock=lambda: datetime(2026, 9, 18, 12, tzinfo=UTC),
+    )
     current = scope()
     old = binding()
     store.initialize(current, old, store.issue_bootstrap(current, old))
