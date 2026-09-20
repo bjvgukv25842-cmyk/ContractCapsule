@@ -19,11 +19,14 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, ClassVar
 
+from contractcapsule.models.view import CompiledView, view_manifest_digest
+
 from .budget import (
     Budget,
     BudgetError,
     BudgetOverflow,
     budget_digest,
+    count_tokens,
     enforce_budget,
     normalize_budget,
     payload_bytes,
@@ -47,8 +50,9 @@ class Condition(StrEnum):
 
 _CONDITION_TOKEN = re.compile(r"(?<![A-Za-z0-9_])(?:B[0-4]|CC)(?![A-Za-z0-9_])")
 _GOLD_MARKER = re.compile(
-    r"(?:gold|condition|target[-_ ]?effect|protected[-_ ]?invariant|"
-    r"forbidden[-_ ]?spillover|expected[-_ ]?(?:condition|outcome|label))",
+    r"(?:gold[-_ ]?(?:label|atom|truth|check)|target[-_ ]?effect|"
+    r"protected[-_ ]?(?:invariant|check)|forbidden[-_ ]?spillover|"
+    r"expected[-_ ]?(?:condition|outcome|label))",
     re.IGNORECASE,
 )
 _TEXT_EXTENSIONS = frozenset(
@@ -136,6 +140,8 @@ class ContextArtifact:
                 raise ProviderError("artifact digest does not match content")
             if type(self.token_count) is not int or self.token_count < 0:
                 raise ProviderError("artifact token count is invalid")
+            if self.token_count != count_tokens(self.content):
+                raise ProviderError("artifact token count does not match content")
             normalized = normalize_budget(self.budget)
             if type(self.byte_count) is not int or self.byte_count < 0:
                 raise ProviderError("artifact byte count is invalid")
@@ -365,6 +371,35 @@ def _task_root(task: object) -> Path | None:
     return root
 
 
+def _task_approved(task: object) -> bool:
+    approval = _lookup(task, "human_approval", "approval_status")
+    if getattr(approval, "value", approval) != "approved":
+        return False
+    if _lookup(task, "executable") is not True:
+        return False
+    repository = _lookup(task, "repository")
+    return _lookup(repository, "source_status") == "verified"
+
+
+def _declared_p0_paths(task: object) -> frozenset[str]:
+    raw = _lookup(task, "p0_paths", "mandatory_p0_paths")
+    if raw is None:
+        return frozenset()
+    if isinstance(raw, (str, Path, Mapping)) or not isinstance(raw, Iterable):
+        raise ProviderError("task P0 metadata is invalid")
+    paths: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str) or not item or "\\" in item or item.startswith("/"):
+            raise ProviderError("task P0 path is invalid")
+        parts = item.split("/")
+        if any(part in {"", ".", ".."} for part in parts):
+            raise ProviderError("task P0 path is invalid")
+        paths.add(item)
+    if paths and not _task_approved(task):
+        raise ProviderError("P0 metadata requires an approved executable task")
+    return frozenset(paths)
+
+
 def _declared_paths(task: object) -> tuple[str, ...]:
     raw = _lookup(
         task,
@@ -405,18 +440,8 @@ def _safe_file(root: Path, relative: str) -> Path:
 
 
 def _excluded(relative: str) -> bool:
-    parts = set(Path(relative).parts)
+    parts = {part.casefold() for part in Path(relative).parts}
     return bool(parts & _EXCLUDED_PARTS)
-
-
-def _is_p0(relative: str, raw: str) -> bool:
-    lower = relative.casefold()
-    return (
-        any(part.startswith("p0") for part in Path(lower).parts)
-        or "p0_exact" in raw.casefold()
-        or '"compression_class"' in raw.casefold()
-        and "p0" in raw.casefold()
-    )
 
 
 def _sanitize(raw: str, *, p0: bool) -> str:
@@ -426,7 +451,9 @@ def _sanitize(raw: str, *, p0: bool) -> str:
         raise ProviderError("context file is not valid UTF-8") from error
     lines: list[str] = []
     for line in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-        if not p0 and (_GOLD_MARKER.search(line) or _CONDITION_TOKEN.search(line)):
+        # P0 affects retention and overflow only. It never grants permission
+        # to carry benchmark labels or condition instructions into a view.
+        if _GOLD_MARKER.search(line) or _CONDITION_TOKEN.search(line):
             continue
         lines.append(line.rstrip())
     text = "\n".join(lines).strip()
@@ -440,6 +467,7 @@ def _source_digest(paths: Sequence[str]) -> str:
 
 def _collect_sources(task: object) -> tuple[_Source, ...]:
     root = _task_root(task)
+    p0_paths = _declared_p0_paths(task)
     declared = _declared_paths(task)
     pairs: list[tuple[str, Path]] = []
     if root is not None and declared:
@@ -461,24 +489,32 @@ def _collect_sources(task: object) -> tuple[_Source, ...]:
                 continue
             pairs.append((relative, _safe_file(root, relative)))
 
+    if not pairs and p0_paths:
+        raise ProviderError("declared P0 path is unavailable")
     if not pairs:
         raw = _lookup(task, "context", "context_text", "prompt", "prompt_text", "description")
         if isinstance(raw, str) and raw:
-            text = _sanitize(raw, p0=_is_p0("task-context", raw))
+            text = _sanitize(raw, p0=False)
             if text:
-                return (_Source("task-context", text, _is_p0("task-context", raw)),)
+                return (_Source("task-context", text, False),)
         return ()
 
     sources: list[_Source] = []
+    seen_p0: set[str] = set()
     for relative, path in pairs:
         try:
             raw = path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as error:
             raise ProviderError("context file cannot be read") from error
-        p0 = _is_p0(relative, raw)
+        normalized_relative = relative.replace("\\", "/")
+        p0 = normalized_relative in p0_paths
+        if p0:
+            seen_p0.add(normalized_relative)
         text = _sanitize(raw, p0=p0)
         if text:
             sources.append(_Source(relative, text, p0))
+    if p0_paths - seen_p0:
+        raise ProviderError("declared P0 path is unavailable")
     return tuple(sources)
 
 
@@ -608,8 +644,13 @@ def _atom_statements(
                 continue
             statement = item.get("statement")
             if isinstance(statement, str) and statement.strip():
-                p0 = "p0" in str(item.get("compression_class", "")).casefold()
-                statements.append(_Source(source.relative_path, _sanitize(statement, p0=p0), p0))
+                statements.append(
+                    _Source(
+                        source.relative_path,
+                        _sanitize(statement, p0=source.p0),
+                        source.p0,
+                    )
+                )
                 found = True
         if not found:
             statements.append(source)
@@ -670,12 +711,31 @@ class ContractCapsuleProvider(ContextProvider):
     def _render(
         self, task: object, budget: Budget
     ) -> tuple[str, bool, tuple[str, ...]]:
-        del budget
-        explicit = _lookup(task, "compiled_view", "capsule_view", "runtime_view", "view_content")
-        if isinstance(explicit, str) and explicit:
-            p0 = _is_p0("runtime-view", explicit)
-            return _sanitize(explicit, p0=p0), p0, ("runtime-view",)
-        return _join(_collect_sources(task))
+        if not _task_approved(task):
+            raise ProviderError("CC requires an approved executable task and compiled view manifest")
+        compiled = _lookup(task, "compiled_view")
+        if not isinstance(compiled, CompiledView) or not compiled.validation.valid:
+            raise ProviderError("CC requires a validated compiled view manifest")
+        task_id = _lookup(task, "task_id")
+        if task_id is not None and compiled.manifest.task_id != task_id:
+            raise ProviderError("compiled view task binding mismatch")
+        expected_manifest = _lookup(task, "compiled_view_manifest_digest")
+        actual_manifest = view_manifest_digest(compiled.manifest)
+        if expected_manifest != actual_manifest:
+            raise ProviderError("compiled view manifest digest mismatch")
+        token_count = count_tokens(compiled.content)
+        if token_count != compiled.manifest.tokens.total:
+            raise ProviderError("compiled view token accounting mismatch")
+        if compiled.manifest.tokens.available != budget.max_tokens:
+            raise ProviderError("compiled view budget mismatch")
+        if token_count > budget.max_tokens:
+            raise BudgetOverflow("p0_budget_overflow")
+        sanitized = _sanitize(compiled.content, p0=True)
+        if sanitized != compiled.content:
+            raise ProviderError("compiled view contains condition or gold markers")
+        # The compiler has already performed closure/P0 selection. Treat the
+        # resulting view as mandatory so this provider can never trim it.
+        return compiled.content, True, ("compiled-view:" + actual_manifest,)
 
 
 _PROVIDERS: Mapping[Condition, type[ContextProvider]] = MappingProxyType(

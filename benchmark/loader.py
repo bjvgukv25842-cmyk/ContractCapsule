@@ -22,6 +22,15 @@ class _UniqueSafeLoader(yaml.SafeLoader):
     pass
 
 
+def _unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if type(key) is not str or key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
 def _construct_mapping(loader: _UniqueSafeLoader, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
     mapping: dict[Any, Any] = {}
     for key_node, value_node in node.value:
@@ -73,13 +82,14 @@ def _validate_digest(value: str) -> str:
 def _contained_file(root: Path, relative: str) -> Path:
     if not relative or relative.startswith("/") or "\\" in relative:
         raise BenchmarkLoadError("path must be repository-relative")
-    candidate = (root / relative).resolve()
+    raw_candidate = root / relative
+    if raw_candidate.is_symlink():
+        raise BenchmarkLoadError("symlinked task files are not allowed")
+    candidate = raw_candidate.resolve()
     try:
         candidate.relative_to(root.resolve())
     except ValueError as error:
         raise BenchmarkLoadError("path escapes task package") from error
-    if candidate.is_symlink():
-        raise BenchmarkLoadError("symlinked task files are not allowed")
     return candidate
 
 
@@ -106,14 +116,28 @@ def load_task(task_dir: Path) -> TaskSpec:
         if lock_file.is_symlink() or not lock_file.is_file():
             raise BenchmarkLoadError("repository.lock must be a regular file")
         try:
-            lock = json.loads(lock_file.read_text(encoding="utf-8"))
+            lock = json.loads(
+                lock_file.read_text(encoding="utf-8"),
+                object_pairs_hook=_unique_json_pairs,
+            )
             digest = lock["content_digest"]
-        except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError) as error:
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as error:
+            if isinstance(error, ValueError) and str(error) == "duplicate JSON key":
+                raise BenchmarkLoadError("duplicate JSON key") from None
             raise BenchmarkLoadError("repository.lock is invalid") from error
         _validate_digest(digest)
         expected = task.repository.content_digest
         if expected is not None and digest != expected:
             raise BenchmarkLoadError("repository lock digest mismatch")
+    elif task.human_approval.value == "approved":
+        raise BenchmarkLoadError("approved task repository.lock is missing")
     return task
 
 
@@ -124,21 +148,27 @@ def load_manifest(path: Path) -> BenchmarkManifest:
     if manifest_path.is_symlink() or not manifest_path.is_file():
         raise BenchmarkLoadError("benchmark manifest must be a regular file")
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(
+            manifest_path.read_text(encoding="utf-8"),
+            object_pairs_hook=_unique_json_pairs,
+        )
         manifest = BenchmarkManifest.model_validate(_tuplify(raw))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+        if isinstance(error, ValueError) and str(error) == "duplicate JSON key":
+            raise BenchmarkLoadError("duplicate JSON key") from None
         raise BenchmarkLoadError("benchmark manifest is invalid JSON") from error
     except Exception as error:
         raise BenchmarkLoadError("benchmark manifest schema is invalid") from error
     tasks_root = manifest_path.parent / "tasks"
-    if tasks_root.is_dir():
-        for declared in manifest.tasks:
-            package = tasks_root / declared.task_id
-            if not package.exists():
-                raise BenchmarkLoadError("manifest task package is missing")
-            loaded = load_task(package)
-            if loaded != declared:
-                raise BenchmarkLoadError("manifest task package differs from manifest")
+    if tasks_root.is_symlink() or not tasks_root.is_dir():
+        raise BenchmarkLoadError("manifest task package root is missing")
+    for declared in manifest.tasks:
+        package = tasks_root / declared.task_id
+        if not package.exists():
+            raise BenchmarkLoadError("manifest task package is missing")
+        loaded = load_task(package)
+        if loaded != declared:
+            raise BenchmarkLoadError("manifest task package differs from manifest")
     if manifest.manifest_digest is not None:
         payload = dict(raw)
         payload.pop("manifest_digest", None)

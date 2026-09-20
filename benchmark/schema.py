@@ -13,7 +13,12 @@ from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from contractcapsule.models.base import Digest, NonEmptyString, StrictFrozenModel
+from contractcapsule.models.base import (
+    Digest,
+    NonEmptyString,
+    StrictFrozenModel,
+    is_safe_relative_path,
+)
 
 TaskId = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)+$")]
 Category = Literal["policy", "api", "architecture", "procedure"]
@@ -103,6 +108,7 @@ class TaskSpec(StrictFrozenModel):
     executable: bool = False
     max_runtime_seconds: float = Field(gt=0, le=900)
     checks: GoldChecks = GoldChecks()
+    p0_paths: tuple[NonEmptyString, ...] = ()
     old_capsule_digest: Digest | None = None
     new_capsule_digest: Digest | None = None
     candidate_reason: NonEmptyString = "awaiting human source and truth review"
@@ -118,6 +124,19 @@ class TaskSpec(StrictFrozenModel):
             except ValueError:
                 pass
         raise ValueError("human_approval must be pending, approved, or excluded")
+
+    @field_validator("p0_paths", mode="before")
+    @classmethod
+    def _p0_paths_tuple(cls, value: object) -> tuple[str, ...]:
+        if isinstance(value, list):
+            value = tuple(value)
+        if not isinstance(value, tuple):
+            raise TypeError("p0_paths must be a tuple or list")
+        if len(set(value)) != len(value):
+            raise ValueError("p0_paths must be unique")
+        if any(type(item) is not str or not is_safe_relative_path(item) for item in value):
+            raise ValueError("p0_paths must remain repository-relative")
+        return value
 
     @model_validator(mode="after")
     def _approval_boundary(self) -> TaskSpec:
@@ -146,4 +165,19 @@ class BenchmarkManifest(StrictFrozenModel):
             raise ValueError("benchmark task IDs must be unique")
         if self.status == "frozen" and len(self.tasks) != 24:
             raise ValueError("frozen CapsuleBench v1.0 requires 24 tasks")
+        if self.status == "frozen":
+            if self.manifest_digest is None:
+                raise ValueError("frozen benchmark requires a manifest digest")
+            for task in self.tasks:
+                if (
+                    task.human_approval is not ApprovalStatus.APPROVED
+                    or task.repository.source_status != "verified"
+                    or task.repository.commit is None
+                    or task.repository.content_digest is None
+                    or not task.executable
+                    or not task.checks.target
+                    or not task.checks.invariant
+                    or not task.checks.spillover
+                ):
+                    raise ValueError("frozen benchmark tasks require human-approved executable locks")
         return self

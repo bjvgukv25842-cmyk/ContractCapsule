@@ -251,6 +251,12 @@ def assert_budget_parity(artifacts: object, budget: object) -> None:
             raise BudgetError("budget mismatch across context artifacts")
         if type(tokens) is not int or tokens < 0 or tokens > expected.max_tokens:
             raise BudgetOverflow("budget_overflow")
+        try:
+            actual_tokens = count_tokens(artifact.content)
+        except AttributeError as error:
+            raise BudgetError("invalid context artifact") from error
+        if tokens != actual_tokens:
+            raise BudgetError("artifact token accounting mismatch")
         if type(bytes_used) is not int or bytes_used < 0:
             raise BudgetError("invalid artifact byte accounting")
         if expected.max_bytes is not None and bytes_used > expected.max_bytes:

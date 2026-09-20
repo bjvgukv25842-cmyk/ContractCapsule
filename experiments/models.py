@@ -8,6 +8,7 @@ or version, and a run record is append-only once emitted.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import math
 import os
@@ -134,6 +135,8 @@ class ExperimentConfig(ExperimentModel):
             raise ValueError("live_agent cannot be enabled in dry-run mode")
         if self.live_agent and self.preflight_receipt is None:
             raise ValueError("live_agent requires preflight_receipt")
+        if self.live_agent and (self.model is None or self.version is None):
+            raise ValueError("live_agent requires frozen model and version")
         return self
 
     @property
@@ -167,7 +170,7 @@ class PreflightReceipt(ExperimentModel):
             raise TypeError("capabilities must be a tuple or list")
         return value
 
-    @field_validator("config_digest", "digest")
+    @field_validator("config_digest", "digest", "signature")
     @classmethod
     def _receipt_digest(cls, value: str | None) -> str | None:
         if value is not None and _DIGEST.fullmatch(value) is None:
@@ -188,6 +191,23 @@ class PreflightReceipt(ExperimentModel):
 
     def computed_digest(self) -> str:
         return _digest(_canonical(self.unsigned_payload()))
+
+    def computed_signature(self, key: bytes) -> str:
+        if type(key) is not bytes or len(key) < 32:
+            raise ValueError("preflight signing key is invalid")
+        payload = b"contractcapsule-m7-preflight/1\x00" + _canonical(
+            self.unsigned_payload()
+        )
+        return "sha256:" + hmac.new(key, payload, hashlib.sha256).hexdigest()
+
+    def verify_signature(self, key: bytes) -> bool:
+        if self.signature is None:
+            return False
+        try:
+            expected = self.computed_signature(key)
+        except ValueError:
+            return False
+        return hmac.compare_digest(self.signature, expected)
 
 
 class RunRecord(ExperimentModel):
@@ -233,6 +253,13 @@ class RunRecord(ExperimentModel):
             raise ValueError("run identifiers must be bounded nonempty strings")
         return value
 
+    @field_validator("condition")
+    @classmethod
+    def _condition(cls, value: str) -> str:
+        if value not in {"B0", "B1", "B2", "B3", "B4", "CC"}:
+            raise ValueError("unknown experiment condition")
+        return value
+
     @field_validator("raw_event_path")
     @classmethod
     def _raw_path(cls, value: str) -> str:
@@ -276,10 +303,18 @@ class RunRecord(ExperimentModel):
             raise ValueError("initial attempt cannot have retry_of")
         if self.attempt_number > 0 and self.retry_of is None:
             raise ValueError("retry attempts require retry_of")
-        if (
-            self.infrastructure_failure is False
-            and self.failure_code is not None
-            and self.failure_code.startswith(("INFRA_", "ADAPTER_", "PREFLIGHT_"))
+        infrastructure_prefix = ("INFRA_", "ADAPTER_", "PREFLIGHT_")
+        if self.infrastructure_failure:
+            if self.task_outcome != "unknown" or self.failure_code is None:
+                raise ValueError("infrastructure failures must have unknown task outcome")
+            if not (
+                self.failure_code.startswith(infrastructure_prefix)
+                or self.failure_code in {"TIMEOUT", "EXECUTION_FAILED"}
+            ):
+                raise ValueError("task failure cannot be marked infrastructure")
+        elif (
+            self.failure_code is not None
+            and self.failure_code.startswith(infrastructure_prefix)
         ):
             # A task failure may carry a task-specific code, but never an
             # infrastructure-coded prefix.

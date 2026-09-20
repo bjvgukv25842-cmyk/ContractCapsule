@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -13,8 +14,17 @@ from baselines import (
     Condition,
     ContextArtifact,
     ContextProvider,
+    ProviderError,
     assert_budget_parity,
     provider_for,
+)
+from baselines.budget import count_tokens
+from contractcapsule.models.view import (
+    CompiledView,
+    TokenAccounting,
+    ValidationReport,
+    ViewManifest,
+    view_manifest_digest,
 )
 
 
@@ -24,6 +34,45 @@ class FixtureTask:
     package_root: Path
     context_files: tuple[str, ...]
     prompt: str = "Preserve the audit rule while changing the endpoint."
+    human_approval: str = "approved"
+    executable: bool = True
+    repository: dict[str, str] = field(
+        default_factory=lambda: {"source_status": "verified"}
+    )
+    p0_paths: tuple[str, ...] = ()
+    compiled_view: CompiledView | None = None
+    compiled_view_manifest_digest: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.compiled_view is None:
+            content = "Verified view: the audit rule remains enabled."
+            validation = ValidationReport(valid=True)
+            tokens = count_tokens(content)
+            manifest = ViewManifest(
+                task_id=self.task_id,
+                tenant="fixture",
+                repository="fixture",
+                as_of="2026-09-20T00:00:00Z",
+                task_digest="sha256:" + "1" * 64,
+                permission_digest="sha256:" + "2" * 64,
+                request_digest="sha256:" + "3" * 64,
+                model_id="fixture-model",
+                tokenizer_profile="ccs-neutral-o200k/1.0.0",
+                renderer_version="ccs-neutral/1.0.0",
+                tokens=TokenAccounting(
+                    total=tokens,
+                    available=256,
+                    sections={"content": tokens},
+                    boundary_adjustment=0,
+                ),
+                validation=validation,
+            )
+            object.__setattr__(
+                self,
+                "compiled_view",
+                CompiledView(content=content, manifest=manifest, validation=validation),
+            )
+            object.__setattr__(self, "compiled_view_manifest_digest", view_manifest_digest(manifest))
 
 
 @pytest.fixture
@@ -101,6 +150,7 @@ def test_p0_overflow_fails_closed(task: FixtureTask, tmp_path: Path) -> None:
         task_id=task.task_id,
         package_root=task.package_root,
         context_files=("p0.md",),
+        p0_paths=("p0.md",),
     )
     # Keep the fixture outside the package's declared root to ensure the
     # provider does not accidentally read arbitrary paths.
@@ -117,3 +167,50 @@ def test_provider_rejects_path_escape(task: FixtureTask) -> None:
     )
     with pytest.raises(ValueError, match="path"):
         provider_for(Condition.B1).provide(escaped, budget=256)
+
+
+def test_cc_requires_a_validated_compiled_view(task: FixtureTask) -> None:
+    invalid = FixtureTask(
+        task_id=task.task_id,
+        package_root=task.package_root,
+        context_files=task.context_files,
+        compiled_view=None,
+    )
+    object.__setattr__(invalid, "compiled_view_manifest_digest", None)
+    object.__setattr__(invalid, "compiled_view", "untrusted text")
+    with pytest.raises(ProviderError, match="compiled view manifest"):
+        provider_for(Condition.CC).provide(invalid, budget=256)
+
+
+def test_untrusted_p0_marker_cannot_bypass_condition_filtering(task: FixtureTask) -> None:
+    path = task.package_root / "untrusted.md"
+    path.write_text(
+        "P0_EXACT: preserve this\n"
+        "gold_label: CC\n"
+        "expected_condition: B1\n",
+        encoding="utf-8",
+    )
+    untrusted = FixtureTask(
+        task_id=task.task_id,
+        package_root=task.package_root,
+        context_files=("untrusted.md",),
+        human_approval="pending",
+        executable=False,
+        repository={"source_status": "unverified"},
+    )
+    artifact = provider_for(Condition.B1).provide(untrusted, budget=256)
+    assert "gold_label" not in artifact.payload
+    assert "expected_condition" not in artifact.payload
+
+
+def test_context_artifact_recomputes_token_accounting(task: FixtureTask) -> None:
+    content = "A payload that needs real accounting."
+    with pytest.raises(ProviderError, match="token"):
+        ContextArtifact(
+            condition=Condition.B1,
+            content=content,
+            digest="sha256:" + hashlib.sha256(content.encode()).hexdigest(),
+            token_count=0,
+            budget=256,
+            byte_count=len(content.encode()),
+        )

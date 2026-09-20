@@ -20,7 +20,9 @@ class PreflightError(ValueError):
     """The adapter/config preflight could not produce a trusted receipt."""
 
 
-def _metadata(adapter: object | None) -> tuple[str | None, str | None, tuple[str, ...], str | None, bool]:
+def _metadata(
+    adapter: object | None, expected_agent: str
+) -> tuple[str | None, str | None, tuple[str, ...], str | None, bool]:
     if adapter is None:
         return None, None, (), "ADAPTER_NOT_PROBED", False
     try:
@@ -36,11 +38,13 @@ def _metadata(adapter: object | None) -> tuple[str | None, str | None, tuple[str
         return None, None, (), "ADAPTER_METADATA_INVALID", False
     if not isinstance(model, str) or not model:
         return None, None, (), "ADAPTER_METADATA_INVALID", False
+    if agent != expected_agent:
+        return None, None, (), "ADAPTER_METADATA_INVALID", False
     if not isinstance(capabilities, (tuple, list)) or any(
         not isinstance(item, str) or not item for item in capabilities
     ):
         return None, None, (), "ADAPTER_METADATA_INVALID", False
-    return version, model, tuple(capabilities), None, bool(agent)
+    return version, model, tuple(capabilities), None, True
 
 
 def _write_receipt(path: Path, receipt: PreflightReceipt) -> None:
@@ -74,6 +78,7 @@ def preflight_config(
     output_path: Path | str | None = None,
     adapter: object | None = None,
     binary: str | None = None,
+    signing_key: bytes | None = None,
 ) -> PreflightReceipt:
     """Capture observed adapter metadata without inventing unavailable values.
 
@@ -86,7 +91,10 @@ def preflight_config(
         parsed = load_config(config)
     except Exception as error:
         raise PreflightError("invalid experiment config") from error
-    version, model, capabilities, error_code, available = _metadata(adapter)
+    version, model, capabilities, error_code, available = _metadata(adapter, parsed.agent)
+    if available and (type(signing_key) is not bytes or len(signing_key) < 32):
+        version, model, capabilities = None, None, ()
+        error_code, available = "PREFLIGHT_SIGNING_KEY_REQUIRED", False
     receipt = PreflightReceipt(
         config_digest=parsed.digest,
         agent=parsed.agent,
@@ -98,6 +106,8 @@ def preflight_config(
         error_code=error_code,
     )
     receipt = receipt.model_copy(update={"digest": receipt.computed_digest()})
+    if signing_key is not None:
+        receipt = receipt.model_copy(update={"signature": receipt.computed_signature(signing_key)})
     target = Path(output_path) if output_path is not None else parsed.preflight_receipt
     if target is not None:
         _write_receipt(target, receipt)
@@ -122,6 +132,7 @@ def validate_receipt(
     config: ExperimentConfig | Path | str | Mapping[str, Any],
     *,
     require_available: bool = True,
+    signing_key: bytes | None = None,
 ) -> PreflightReceipt:
     parsed = load_config(config)
     if receipt is None:
@@ -133,8 +144,19 @@ def validate_receipt(
         raise PreflightError("preflight receipt config mismatch")
     if loaded.agent != parsed.agent:
         raise PreflightError("preflight receipt agent mismatch")
+    if parsed.model is not None and loaded.model != parsed.model:
+        raise PreflightError("preflight receipt model mismatch")
+    if parsed.version is not None and loaded.version != parsed.version:
+        raise PreflightError("preflight receipt version mismatch")
+    if parsed.binary is not None and loaded.binary != parsed.binary:
+        raise PreflightError("preflight receipt binary mismatch")
     if require_available and not loaded.available:
         raise PreflightError("adapter preflight is unavailable")
+    if loaded.available:
+        if type(signing_key) is not bytes or len(signing_key) < 32:
+            raise PreflightError("preflight signing key is required")
+        if not loaded.verify_signature(signing_key):
+            raise PreflightError("preflight receipt signature mismatch")
     return loaded
 
 

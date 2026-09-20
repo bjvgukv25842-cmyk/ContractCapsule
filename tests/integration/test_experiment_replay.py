@@ -20,10 +20,13 @@ def _task(tmp_path: Path) -> dict[str, object]:
     return {
         "task_id": "task-001",
         "repository_commit": "a" * 40,
+        "human_approval": "approved",
+        "executable": True,
+        "repository": {"source_status": "verified"},
         "max_runtime_seconds": 5,
         "tests": {
-            "target": ["tests/target.py"],
-            "invariant": ["tests/invariant.py"],
+            "target": [[sys.executable, "tests/target.py"]],
+            "invariant": [[sys.executable, "tests/invariant.py"]],
         },
         "root": str(tmp_path),
     }
@@ -109,6 +112,24 @@ def test_only_infrastructure_failures_are_retryable(tmp_path: Path) -> None:
     assert retry.raw_event_path != infra.raw_event_path
 
 
+def test_task_failures_cannot_be_marked_as_retryable_infrastructure(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="infrastructure"):
+        RunRecord.new(
+            task_id="task-001",
+            condition="B0",
+            agent="codex",
+            repetition=0,
+            repository_commit="a" * 40,
+            capsule_digests=[],
+            prompt_digest="sha256:" + "2" * 64,
+            raw_event_path="raw/task-001.jsonl",
+            exit_code=1,
+            infrastructure_failure=True,
+            failure_code="TARGET_FAILED",
+            task_outcome="failed",
+        )
+
+
 def test_dry_run_refuses_without_preflight_receipt(tmp_path: Path) -> None:
     task = _task(tmp_path)
     config = _config(tmp_path)
@@ -129,6 +150,45 @@ def test_preflight_rejects_duplicate_yaml_keys_and_records_unavailable_metadata(
     assert receipt.model is None
     assert receipt.digest.startswith("sha256:")
     assert (tmp_path / "receipt.json").exists()
+
+
+def test_available_preflight_requires_authenticated_receipt_and_frozen_binding(
+    tmp_path: Path,
+) -> None:
+    class FakeAdapter:
+        def preflight(self) -> object:
+            return type(
+                "Observed",
+                (),
+                {
+                    "agent": "codex",
+                    "version": "1.2.3",
+                    "model": "codex-test",
+                    "capabilities": (),
+                },
+            )()
+
+    from experiments.preflight import validate_receipt
+
+    key = b"k" * 32
+    config = ExperimentConfig(
+        study_id="signed",
+        agent="codex",
+        model="codex-test",
+        version="1.2.3",
+        output_path=tmp_path / "runs.jsonl",
+    )
+    receipt = preflight_config(
+        config,
+        adapter=FakeAdapter(),
+        signing_key=key,
+        output_path=tmp_path / "signed.json",
+    )
+    assert receipt.available is True
+    validate_receipt(receipt, config, signing_key=key)
+    forged = receipt.model_copy(update={"model": "other", "digest": receipt.computed_digest()})
+    with pytest.raises(PreflightError):
+        validate_receipt(forged, config, signing_key=key)
 
 
 def test_screening_yaml_loads_arrays_without_freezing_agent_metadata() -> None:
@@ -171,6 +231,35 @@ def test_scorer_uses_declared_relative_tests_and_ignores_condition_labels(
     assert result.condition is None
     with pytest.raises(ScoreError):
         score_task(task, command=[sys.executable, "../escape.py"], cwd=tmp_path)
+
+
+def test_scorer_rejects_unapproved_tasks(tmp_path: Path) -> None:
+    task = _task(tmp_path)
+    task["human_approval"] = "pending"
+    task["executable"] = False
+    with pytest.raises(ScoreError, match="approved"):
+        score_task(task, cwd=tmp_path)
+
+
+def test_scorer_rejects_declared_symlink_paths(tmp_path: Path) -> None:
+    task = _task(tmp_path)
+    outside = tmp_path.parent / "outside-test.py"
+    outside.write_text("print('outside')\n", encoding="utf-8")
+    link = tmp_path / "tests" / "link.py"
+    link.symlink_to(outside)
+    task["tests"] = {"target": [[sys.executable, "tests/link.py"]]}
+    with pytest.raises(ScoreError, match="symlink"):
+        score_task(task, cwd=tmp_path)
+
+
+def test_explicit_scorer_command_must_match_declared_argv_exactly(tmp_path: Path) -> None:
+    task = _task(tmp_path)
+    with pytest.raises(ScoreError, match="declared"):
+        score_task(
+            task,
+            command=[sys.executable, "tests/target.py", "--extra"],
+            cwd=tmp_path,
+        )
 
 
 def test_run_record_round_trips_jsonl(tmp_path: Path) -> None:

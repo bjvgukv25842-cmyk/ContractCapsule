@@ -99,6 +99,34 @@ def _command(value: object) -> tuple[str, ...]:
     return result
 
 
+def _validate_command_paths(command: tuple[str, ...], root: Path) -> None:
+    """Reject repository arguments that resolve through symlinks or escape root."""
+
+    for index, item in enumerate(command):
+        if index == 0 and item.startswith("/"):
+            if not Path(item).is_file():
+                raise ScoreError("scoring executable is unavailable")
+            continue
+        if item.startswith("/"):
+            raise ScoreError("scoring paths must be relative")
+        # Only path-shaped arguments are resolved. Plain flags and executable
+        # names are intentionally left to the child process' normal lookup.
+        candidate = root / item
+        if index == 0 and "/" not in item and not candidate.exists():
+            continue
+        if index > 0 and "/" not in item and not candidate.exists():
+            continue
+        if not candidate.exists():
+            continue
+        if candidate.is_symlink():
+            raise ScoreError("scoring command path is a symlink")
+        try:
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(root)
+        except (OSError, ValueError) as error:
+            raise ScoreError("scoring command path escapes task root") from error
+
+
 def _check_attr(check: object, name: str, default: object = None) -> object:
     if isinstance(check, Mapping):
         return check.get(name, default)
@@ -130,13 +158,8 @@ def _declared_command_matches(requested: tuple[str, ...], checks: Mapping[str, t
 
     for values in checks.values():
         for check in values:
-            raw = _check_attr(check, "command", check)
-            if isinstance(raw, str):
-                if raw in requested[1:]:
-                    return True
-                continue
             try:
-                if requested == _command(raw):
+                if requested == _check_command(check):
                     return True
             except ScoreError:
                 continue
@@ -147,7 +170,10 @@ def _check_cwd(check: object, root: Path) -> Path:
     raw = _check_attr(check, "cwd", ".")
     if not isinstance(raw, str) or not _safe_relative(raw) and raw != ".":
         raise ScoreError("declared check cwd must be relative")
-    candidate = root if raw == "." else (root / raw).resolve()
+    candidate_path = root if raw == "." else root / raw
+    if candidate_path.is_symlink():
+        raise ScoreError("declared check cwd is a symlink")
+    candidate = candidate_path.resolve()
     try:
         candidate.relative_to(root)
     except ValueError as error:
@@ -201,13 +227,20 @@ def score_task(
     """
 
     del condition, labels
+    approval = _check_attr(task, "human_approval", _check_attr(task, "approval_status", None))
+    approval_value = getattr(approval, "value", approval)
+    repository = _check_attr(task, "repository", None)
+    source_status = _check_attr(repository, "source_status", None)
+    executable = _check_attr(task, "executable", False)
+    if approval_value != "approved" or executable is not True or source_status != "verified":
+        raise ScoreError("task is not human-approved and executable")
     root = _task_root(task, cwd or task_root or workspace)
     declared = _declared_checks(task)
     if command is not None:
         requested = _command(command)
         if not any(declared.values()) or not _declared_command_matches(requested, declared):
             raise ScoreError("scoring command is not declared by the task")
-        declared = {"target": (command,), "invariant": (), "spillover": ()}
+        declared = {"target": (requested,), "invariant": (), "spillover": ()}
     if not any(declared.values()):
         raise ScoreError("task declares no executable checks")
     raw_default_timeout: object = timeout_seconds
@@ -227,6 +260,7 @@ def score_task(
     for category, checks in declared.items():
         for check in checks:
             argv = _check_command(check)
+            _validate_command_paths(argv, root)
             check_root = _check_cwd(check, root)
             raw_check_timeout = _check_attr(check, "timeout_seconds", default_timeout)
             if not isinstance(raw_check_timeout, (int, float)) or isinstance(raw_check_timeout, bool) or raw_check_timeout <= 0:

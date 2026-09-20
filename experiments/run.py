@@ -62,6 +62,16 @@ def _task_id(task: object) -> str:
     return value
 
 
+def _assert_executable_task(task: object) -> None:
+    approval = _field(task, "human_approval", _field(task, "approval_status", None))
+    approval_value = getattr(approval, "value", approval)
+    executable = _field(task, "executable", False)
+    repository = _field(task, "repository", None)
+    source_status = _field(repository, "source_status", None)
+    if approval_value != "approved" or executable is not True or source_status != "verified":
+        raise RunRefusal("task is not human-approved and executable")
+
+
 def _artifact_data(artifact: object | None) -> tuple[tuple[str, ...], str | None, str | None]:
     if artifact is None:
         return (), None, None
@@ -178,9 +188,11 @@ def run_once(
     workspace: Path | str | None = None,
     repetition: int = 0,
     dry_run: bool | None = None,
+    preflight_key: bytes | None = None,
 ) -> RunRecord | RunPlan:
     parsed = load_config(config)
     task_id = _task_id(task)
+    _assert_executable_task(task)
     condition = _field(artifact, "condition", _field(task, "condition", "B0"))
     if not isinstance(condition, str) or condition not in {"B0", "B1", "B2", "B3", "B4", "CC"}:
         raise RunRefusal("unknown condition")
@@ -216,6 +228,7 @@ def run_once(
             receipt_value,
             parsed,
             require_available=True,
+            signing_key=preflight_key,
         )
     except PreflightError as error:
         raise RunRefusal(str(error)) from error

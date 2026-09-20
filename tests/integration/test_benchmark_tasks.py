@@ -83,6 +83,57 @@ def test_task_loader_rejects_manifest_digest_mismatch(tmp_path: Path) -> None:
         load_task(task_dir)
 
 
+def test_manifest_loader_rejects_duplicate_json_keys_and_missing_packages(tmp_path: Path) -> None:
+    duplicate = tmp_path / "duplicate.json"
+    duplicate.write_text(
+        '{"spec_version":"CCS-2.1","spec_version":"CCS-2.1",'
+        '"max_view_tokens":128,"tasks":[]}',
+        encoding="utf-8",
+    )
+    with pytest.raises(BenchmarkLoadError, match="duplicate"):
+        load_manifest(duplicate)
+
+    missing = tmp_path / "missing.json"
+    missing.write_text(
+        '{"spec_version":"CCS-2.1","max_view_tokens":128,'
+        '"tasks":[{"task_id":"candidate-001","category":"policy",'
+        '"language":"python","repository":{"source_url":"https://github.com/x/y",'
+        '"commit":null,"license":"pending-verification",'
+        '"source_status":"unverified"},"human_approval":"pending",'
+        '"executable":false,"max_runtime_seconds":10,"checks":{}}]}',
+        encoding="utf-8",
+    )
+    with pytest.raises(BenchmarkLoadError, match="task package"):
+        load_manifest(missing)
+
+
+def test_repository_lock_rejects_duplicate_json_keys(tmp_path: Path) -> None:
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    (task_dir / "task.yaml").write_text(
+        "task_id: lock-duplicate\ncategory: policy\nlanguage: python\n"
+        "repository: {source_url: https://github.com/x/y, commit: null, license: pending-verification, source_status: unverified}\n"
+        "human_approval: pending\nexecutable: false\nmax_runtime_seconds: 10\n",
+        encoding="utf-8",
+    )
+    (task_dir / "repository.lock").write_text(
+        '{"content_digest":"sha256:' + "0" * 64 + '","content_digest":"sha256:' + "0" * 64 + '"}',
+        encoding="utf-8",
+    )
+    with pytest.raises(BenchmarkLoadError, match="duplicate"):
+        load_task(task_dir)
+
+
+def test_task_loader_rejects_symlinked_task_yaml(tmp_path: Path) -> None:
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    outside = tmp_path / "outside.yaml"
+    outside.write_text("task_id: outside\n", encoding="utf-8")
+    (task_dir / "task.yaml").symlink_to(outside)
+    with pytest.raises(BenchmarkLoadError, match="symlink"):
+        load_task(task_dir)
+
+
 def test_check_spec_is_condition_blind_and_shell_free() -> None:
     check = CheckSpec(check_id="target", command=("pytest", "tests/test_target.py"))
     assert check.shell is False
@@ -105,4 +156,31 @@ def test_task_model_requires_nonempty_check_ids() -> None:
             executable=False,
             max_runtime_seconds=900,
             checks={"target": [{"check_id": "", "command": ["pytest"]}]},
+        )
+
+
+def test_frozen_manifest_cannot_contain_pending_candidates() -> None:
+    with pytest.raises(ValueError, match="24 tasks"):
+        from benchmark.schema import BenchmarkManifest
+
+        BenchmarkManifest(
+            status="frozen",
+            max_view_tokens=128,
+            tasks=(
+                TaskSpec(
+                    task_id="candidate-001",
+                    category="policy",
+                    language="python",
+                    repository={
+                        "source_url": "https://github.com/x/y",
+                        "commit": None,
+                        "license": "pending-verification",
+                        "source_status": "unverified",
+                    },
+                    human_approval="pending",
+                    executable=False,
+                    max_runtime_seconds=10,
+                ),
+            ),
+            manifest_digest="sha256:" + "0" * 64,
         )
