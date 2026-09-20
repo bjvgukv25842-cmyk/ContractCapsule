@@ -50,7 +50,8 @@ class Condition(StrEnum):
 
 _CONDITION_TOKEN = re.compile(r"(?<![A-Za-z0-9_])(?:B[0-4]|CC)(?![A-Za-z0-9_])")
 _GOLD_MARKER = re.compile(
-    r"(?:gold[-_ ]?(?:label|atom|truth|check)|target[-_ ]?effect|"
+    r"(?:\b(?:gold|condition|expected)\b\s*[:=]|"
+    r"gold[-_ ]?(?:label|atom|truth|check)|target[-_ ]?effect|"
     r"protected[-_ ]?(?:invariant|check)|forbidden[-_ ]?spillover|"
     r"expected[-_ ]?(?:condition|outcome|label))",
     re.IGNORECASE,

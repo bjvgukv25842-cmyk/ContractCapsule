@@ -14,8 +14,10 @@ import math
 import os
 import re
 from collections.abc import Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Literal
 
 import yaml
@@ -246,6 +248,13 @@ class RunRecord(ExperimentModel):
             raise TypeError("capsule_digests must be a tuple or list")
         return value
 
+    @field_validator("adapter_metadata", mode="before")
+    @classmethod
+    def _freeze_metadata(cls, value: object) -> Mapping[str, Any]:
+        if not isinstance(value, Mapping):
+            raise TypeError("adapter_metadata must be an object")
+        return MappingProxyType(dict(value))
+
     @field_validator("run_id", "attempt_id", "task_id", "condition", "agent")
     @classmethod
     def _ids(cls, value: str) -> str:
@@ -408,6 +417,7 @@ class RunStore:
         self._load()
 
     def _load(self) -> None:
+        self._records = {}
         if not self.path.exists():
             return
         if self.path.is_symlink() or not self.path.is_file():
@@ -428,6 +438,25 @@ class RunStore:
                 raise ValueError("duplicate run_id in run store")
             self._records[record.run_id] = record
 
+    @contextmanager
+    def _exclusive_lock(self):
+        """Serialize append/read-modify-write across worker processes."""
+
+        try:
+            import fcntl
+        except ImportError as error:  # pragma: no cover - supported research hosts are POSIX
+            raise ValueError("run store locking is unavailable") from error
+        lock_path = self.path.with_name(self.path.name + ".lock")
+        if lock_path.is_symlink():
+            raise ValueError("run store lock must be a regular file")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
     @property
     def records(self) -> tuple[RunRecord, ...]:
         return tuple(self._records.values())
@@ -438,22 +467,26 @@ class RunStore:
     def append(self, record: RunRecord) -> RunRecord:
         if not isinstance(record, RunRecord):
             raise TypeError("run store accepts RunRecord values")
-        existing = self._records.get(record.run_id)
-        if existing is not None:
-            if existing == record:
-                return existing
-            raise ValueError("existing run_id cannot be overwritten")
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        encoded = json.dumps(record.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
-        try:
-            with self.path.open("a", encoding="utf-8", newline="\n") as handle:
-                handle.write(encoded + "\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-        except OSError as error:
-            raise ValueError("unable to append run record") from error
-        self._records[record.run_id] = record
-        return record
+        with self._exclusive_lock():
+            self._load()
+            existing = self._records.get(record.run_id)
+            if existing is not None:
+                if existing == record:
+                    return existing
+                raise ValueError("existing run_id cannot be overwritten")
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            encoded = json.dumps(
+                record.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+            )
+            try:
+                with self.path.open("a", encoding="utf-8", newline="\n") as handle:
+                    handle.write(encoded + "\n")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            except OSError as error:
+                raise ValueError("unable to append run record") from error
+            self._records[record.run_id] = record
+            return record
 
     def retry_eligible(self, run_id: str) -> bool:
         record = self._records.get(run_id)

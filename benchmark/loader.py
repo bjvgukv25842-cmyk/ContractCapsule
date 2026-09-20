@@ -120,17 +120,13 @@ def load_task(task_dir: Path) -> TaskSpec:
                 lock_file.read_text(encoding="utf-8"),
                 object_pairs_hook=_unique_json_pairs,
             )
-            digest = lock["content_digest"]
-        except (
-            OSError,
-            UnicodeError,
-            json.JSONDecodeError,
-            KeyError,
-            TypeError,
-            ValueError,
-        ) as error:
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
             if isinstance(error, ValueError) and str(error) == "duplicate JSON key":
                 raise BenchmarkLoadError("duplicate JSON key") from None
+            raise BenchmarkLoadError("repository.lock is invalid") from error
+        try:
+            digest = lock["content_digest"]
+        except (KeyError, TypeError) as error:
             raise BenchmarkLoadError("repository.lock is invalid") from error
         _validate_digest(digest)
         expected = task.repository.content_digest
@@ -152,11 +148,12 @@ def load_manifest(path: Path) -> BenchmarkManifest:
             manifest_path.read_text(encoding="utf-8"),
             object_pairs_hook=_unique_json_pairs,
         )
-        manifest = BenchmarkManifest.model_validate(_tuplify(raw))
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
         if isinstance(error, ValueError) and str(error) == "duplicate JSON key":
             raise BenchmarkLoadError("duplicate JSON key") from None
         raise BenchmarkLoadError("benchmark manifest is invalid JSON") from error
+    try:
+        manifest = BenchmarkManifest.model_validate(_tuplify(raw))
     except Exception as error:
         raise BenchmarkLoadError("benchmark manifest schema is invalid") from error
     tasks_root = manifest_path.parent / "tasks"

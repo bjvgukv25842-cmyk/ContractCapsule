@@ -484,5 +484,6 @@
       },
       "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
     }
-  ]
+  ],
+  "manifest_digest": "sha256:cc77ab4f7323adcf97086fba8dd71e211dc8102c6de5c54a595da3447d0871d6"
 }

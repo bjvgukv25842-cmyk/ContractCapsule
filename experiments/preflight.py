@@ -48,6 +48,8 @@ def _metadata(
 
 
 def _write_receipt(path: Path, receipt: PreflightReceipt) -> None:
+    if path.is_symlink():
+        raise PreflightError("preflight receipt must be a regular file")
     path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     encoded = json.dumps(receipt.model_dump(mode="json"), sort_keys=True, indent=2) + "\n"
@@ -92,6 +94,12 @@ def preflight_config(
     except Exception as error:
         raise PreflightError("invalid experiment config") from error
     version, model, capabilities, error_code, available = _metadata(adapter, parsed.agent)
+    if available and (
+        (parsed.model is not None and model != parsed.model)
+        or (parsed.version is not None and version != parsed.version)
+    ):
+        version, model, capabilities = None, None, ()
+        error_code, available = "PREFLIGHT_CONFIG_MISMATCH", False
     if available and (type(signing_key) is not bytes or len(signing_key) < 32):
         version, model, capabilities = None, None, ()
         error_code, available = "PREFLIGHT_SIGNING_KEY_REQUIRED", False

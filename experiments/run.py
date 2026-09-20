@@ -106,6 +106,8 @@ def _write_raw(path: Path, value: bytes | str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = value if isinstance(value, bytes) else value.encode("utf-8")
     if path.exists():
+        if path.is_symlink() or not path.is_file():
+            raise RunRefusal("raw event path must be a regular file")
         if path.read_bytes() != data:
             raise RunRefusal("raw event path cannot be overwritten")
         return
