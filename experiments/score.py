@@ -38,6 +38,7 @@ class ScoreResult(BaseModel):
 
 
 _UNSAFE_TOKEN = re.compile(r"[\x00\n\r;&|<>`$]")
+_CONDITION_TOKEN = re.compile(r"(?<![A-Za-z0-9_])(?:B[0-4]|CC)(?![A-Za-z0-9_])")
 _MAX_OUTPUT = 1024 * 1024
 
 
@@ -74,7 +75,13 @@ def _command(value: object) -> tuple[str, ...]:
     if not isinstance(value, (tuple, list)) or not value:
         raise ScoreError("scoring command must be a non-empty argv array")
     result = tuple(value)
-    if any(type(item) is not str or not item or _UNSAFE_TOKEN.search(item) for item in result):
+    if any(
+        type(item) is not str
+        or not item
+        or _UNSAFE_TOKEN.search(item)
+        or _CONDITION_TOKEN.search(item)
+        for item in result
+    ):
         raise ScoreError("scoring command contains an unsafe argument")
     if "-c" in result or "--command" in result:
         raise ScoreError("inline shell commands are forbidden")
@@ -116,6 +123,24 @@ def _declared_checks(task: object) -> dict[str, tuple[object, ...]]:
 def _check_command(check: object) -> tuple[str, ...]:
     raw = _check_attr(check, "command", check)
     return _command(raw)
+
+
+def _declared_command_matches(requested: tuple[str, ...], checks: Mapping[str, tuple[object, ...]]) -> bool:
+    """Confirm an explicit command is one of the task's declared checks."""
+
+    for values in checks.values():
+        for check in values:
+            raw = _check_attr(check, "command", check)
+            if isinstance(raw, str):
+                if raw in requested[1:]:
+                    return True
+                continue
+            try:
+                if requested == _command(raw):
+                    return True
+            except ScoreError:
+                continue
+    return False
 
 
 def _check_cwd(check: object, root: Path) -> Path:
@@ -163,6 +188,8 @@ def score_task(
     condition: str | None = None,
     command: Sequence[str] | None = None,
     cwd: Path | str | None = None,
+    task_root: Path | str | None = None,
+    workspace: Path | str | None = None,
     timeout_seconds: float | None = None,
     labels: Mapping[str, object] | None = None,
 ) -> ScoreResult:
@@ -174,9 +201,12 @@ def score_task(
     """
 
     del condition, labels
-    root = _task_root(task, cwd)
+    root = _task_root(task, cwd or task_root or workspace)
     declared = _declared_checks(task)
     if command is not None:
+        requested = _command(command)
+        if not any(declared.values()) or not _declared_command_matches(requested, declared):
+            raise ScoreError("scoring command is not declared by the task")
         declared = {"target": (command,), "invariant": (), "spillover": ()}
     if not any(declared.values()):
         raise ScoreError("task declares no executable checks")
