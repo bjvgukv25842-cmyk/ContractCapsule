@@ -180,11 +180,12 @@ def score_task(
         declared = {"target": (command,), "invariant": (), "spillover": ()}
     if not any(declared.values()):
         raise ScoreError("task declares no executable checks")
-    default_timeout = timeout_seconds
-    if default_timeout is None:
-        default_timeout = _check_attr(task, "max_runtime_seconds", 120.0)
-    if type(default_timeout) not in {int, float} or default_timeout <= 0:
+    raw_default_timeout: object = timeout_seconds
+    if raw_default_timeout is None:
+        raw_default_timeout = _check_attr(task, "max_runtime_seconds", 120.0)
+    if not isinstance(raw_default_timeout, (int, float)) or isinstance(raw_default_timeout, bool) or raw_default_timeout <= 0:
         raise ScoreError("timeout must be positive")
+    default_timeout = float(raw_default_timeout)
 
     passed: dict[str, list[bool]] = {"target": [], "invariant": [], "spillover": []}
     codes: list[int] = []
@@ -197,11 +198,12 @@ def score_task(
         for check in checks:
             argv = _check_command(check)
             check_root = _check_cwd(check, root)
-            check_timeout = _check_attr(check, "timeout_seconds", default_timeout)
-            if type(check_timeout) not in {int, float} or check_timeout <= 0:
+            raw_check_timeout = _check_attr(check, "timeout_seconds", default_timeout)
+            if not isinstance(raw_check_timeout, (int, float)) or isinstance(raw_check_timeout, bool) or raw_check_timeout <= 0:
                 raise ScoreError("declared check timeout must be positive")
+            check_timeout = float(raw_check_timeout)
             code, stdout, stderr, failed_infra, code_name = _run(
-                argv, check_root, min(float(default_timeout), float(check_timeout))
+                argv, check_root, min(default_timeout, check_timeout)
             )
             codes.append(code)
             output.extend(stdout)

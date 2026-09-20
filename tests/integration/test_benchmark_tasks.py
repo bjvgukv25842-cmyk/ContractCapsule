@@ -8,7 +8,6 @@ import pytest
 from benchmark.loader import BenchmarkLoadError, load_manifest, load_task
 from benchmark.schema import ApprovalStatus, CheckSpec, TaskSpec
 
-
 ROOT = Path(__file__).parents[2]
 MANIFEST = ROOT / "benchmark" / "benchmark-manifest.json"
 

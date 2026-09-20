@@ -15,6 +15,7 @@ from typing import Any
 
 from experiments.models import (
     ExperimentConfig,
+    PreflightReceipt,
     RunRecord,
     RunStore,
     UsageRecord,
@@ -146,10 +147,19 @@ def _adapter_observation(result: object) -> tuple[int, bytes, str | None, UsageR
     if isinstance(usage_obj, UsageRecord):
         usage = usage_obj
     else:
+        input_tokens = _field(usage_obj, "input_tokens", None)
+        output_tokens = _field(usage_obj, "output_tokens", None)
+        raw_digest = _field(usage_obj, "raw_digest", None)
+        if input_tokens is not None and type(input_tokens) is not int:
+            raise RunRefusal("adapter returned invalid usage")
+        if output_tokens is not None and type(output_tokens) is not int:
+            raise RunRefusal("adapter returned invalid usage")
+        if raw_digest is not None and not isinstance(raw_digest, str):
+            raise RunRefusal("adapter returned invalid usage")
         usage = UsageRecord(
-            input_tokens=_field(usage_obj, "input_tokens", None),
-            output_tokens=_field(usage_obj, "output_tokens", None),
-            raw_digest=_field(usage_obj, "raw_digest", None),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            raw_digest=raw_digest,
         )
     stderr_digest = _field(result, "stderr_digest", None)
     if stderr_digest is not None and not isinstance(stderr_digest, str):
@@ -198,9 +208,12 @@ def run_once(
     is_dry = parsed.dry_run if dry_run is None else dry_run
     if is_dry:
         return RunPlan(identity_record.run_id, task_id, condition, parsed.agent)
+    receipt_value = preflight_receipt or parsed.preflight_receipt
+    if receipt_value is not None and not isinstance(receipt_value, (PreflightReceipt, Path, str)):
+        raise RunRefusal("invalid preflight receipt")
     try:
         receipt = validate_receipt(
-            preflight_receipt or parsed.preflight_receipt,
+            receipt_value,
             parsed,
             require_available=True,
         )
@@ -210,7 +223,12 @@ def run_once(
         raise RunRefusal("live-agent execution is disabled")
     if adapter is None:
         raise RunRefusal("adapter is required for live execution")
-    run_root = Path(workspace) if workspace is not None else Path(_field(task, "package_root", Path.cwd()))
+    raw_workspace: object = workspace
+    if raw_workspace is None:
+        raw_workspace = _field(task, "package_root", Path.cwd())
+    if not isinstance(raw_workspace, (str, Path)):
+        raise RunRefusal("workspace must be a path")
+    run_root = Path(raw_workspace)
     run_root = run_root.resolve()
     if not run_root.is_dir():
         raise RunRefusal("workspace must be a directory")

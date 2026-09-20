@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import ValidationError
 from yaml.constructor import ConstructorError
 
 from benchmark.schema import BenchmarkManifest, TaskSpec
@@ -94,7 +95,7 @@ def load_task(task_dir: Path) -> TaskSpec:
     raw = _read_yaml(task_yaml)
     try:
         task = TaskSpec.model_validate(_tuplify(raw))
-    except Exception as error:  # pydantic error details can include source text
+    except ValidationError as error:
         message = str(error).lower()
         if "relative" in message or "path" in message:
             raise BenchmarkLoadError("relative check path is invalid") from None

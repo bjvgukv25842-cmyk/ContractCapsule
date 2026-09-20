@@ -15,7 +15,6 @@ from pydantic import Field, field_validator, model_validator
 
 from contractcapsule.models.base import Digest, NonEmptyString, StrictFrozenModel
 
-
 TaskId = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)+$")]
 Category = Literal["policy", "api", "architecture", "procedure"]
 Approval = Literal["pending", "approved", "excluded"]
