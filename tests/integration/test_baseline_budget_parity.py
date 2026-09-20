@@ -117,4 +117,3 @@ def test_provider_rejects_path_escape(task: FixtureTask) -> None:
     )
     with pytest.raises(ValueError, match="path"):
         provider_for(Condition.B1).provide(escaped, budget=256)
-
