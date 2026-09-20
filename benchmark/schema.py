@@ -24,6 +24,7 @@ TaskId = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)+$")]
 Category = Literal["policy", "api", "architecture", "procedure"]
 Approval = Literal["pending", "approved", "excluded"]
 SourceStatus = Literal["verified", "unverified", "unavailable"]
+_CONDITION_TOKEN = re.compile(r"(?<![A-Za-z0-9_])(?:B[0-4]|CC)(?![A-Za-z0-9_])")
 
 
 class ApprovalStatus(StrEnum):
@@ -69,7 +70,7 @@ class CheckSpec(StrictFrozenModel):
     def _safe_command(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if not value or any("\x00" in item for item in value):
             raise ValueError("check command must be non-empty and NUL-free")
-        if any(item in {"CC", "B0", "B1", "B2", "B3", "B4"} for item in value):
+        if any(_CONDITION_TOKEN.search(item) for item in value):
             raise ValueError("condition labels must not enter gold checks")
         for item in value:
             if item.startswith(("/", "\\")) or "\\" in item or any(

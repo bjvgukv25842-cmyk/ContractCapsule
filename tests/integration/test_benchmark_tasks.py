@@ -138,6 +138,8 @@ def test_check_spec_is_condition_blind_and_shell_free() -> None:
     check = CheckSpec(check_id="target", command=("pytest", "tests/test_target.py"))
     assert check.shell is False
     assert "CC" not in check.command
+    with pytest.raises(ValueError, match="condition"):
+        CheckSpec(check_id="unsafe", command=("pytest", "--condition=B0"))
 
 
 def test_task_model_requires_nonempty_check_ids() -> None:
