@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --locked --offline python
 """Codex pre-tool hook wrapper for the core fail-closed decision function."""
 
 from __future__ import annotations
