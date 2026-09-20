@@ -71,7 +71,7 @@ def test_task_loader_rejects_manifest_digest_mismatch(tmp_path: Path) -> None:
     task_yaml = task_dir / "task.yaml"
     task_yaml.write_text(
         "task_id: digest-check\ncategory: policy\nlanguage: python\n"
-        "repository: {source_url: https://github.com/x/y, commit: null, license: pending-verification, source_status: unverified}\n"
+        "repository: {source_url: https://github.com/x/y, commit: null, license: pending-verification, source_status: unverified, content_digest: sha256:1111111111111111111111111111111111111111111111111111111111111111}\n"
         "human_approval: pending\nexecutable: false\nmax_runtime_seconds: 900\n",
         encoding="utf-8",
     )
