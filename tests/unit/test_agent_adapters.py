@@ -12,6 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from contractcapsule.adapters.base import (
+    MAX_EVENT_BYTES,
     MAX_STDOUT_BYTES,
     AdapterError,
     AgentMetadata,
@@ -187,6 +188,25 @@ def test_output_is_truncated_but_metadata_is_parsed(tmp_path: Path) -> None:
     task = AgentTask(task_id="task", prompt="solve", cwd=tmp_path, timeout_seconds=5)
     result = CodexAdapter(binary=str(binary)).run(task, _view(), tmp_path)
     assert len(result.stdout) <= MAX_STDOUT_BYTES
+
+
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_process_output_limit_is_enforced_during_read(
+    tmp_path: Path, stream: str
+) -> None:
+    binary = _fake(
+        tmp_path / f"oversized-{stream}",
+        f"""
+        import json
+        import sys
+        if sys.argv[1:] == ["--version"]:
+            print(json.dumps({{"agent": "codex", "version": "1.2.3", "model": "gpt-test"}}))
+            print("x" * ({MAX_EVENT_BYTES} + 1), file=sys.{stream})
+        """,
+    )
+    with pytest.raises(AdapterError) as error:
+        CodexAdapter(binary=str(binary), timeout_seconds=5).preflight()
+    assert error.value.code == "ADAPTER_OUTPUT_LIMIT"
 
 
 def test_duplicate_and_negative_usage_are_rejected(tmp_path: Path) -> None:

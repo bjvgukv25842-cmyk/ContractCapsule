@@ -14,11 +14,13 @@ import math
 import os
 import re
 import subprocess
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Protocol
+from threading import Event, Thread
+from typing import Any, BinaryIO, ClassVar, Protocol
 
 from pydantic import Field, field_validator
 
@@ -28,6 +30,8 @@ from contractcapsule.models.view import CompiledView
 MAX_STDOUT_BYTES = 1024 * 1024
 MAX_EVENT_BYTES = 8 * 1024 * 1024
 MAX_TIMEOUT_SECONDS = 300.0
+_READ_CHUNK_BYTES = 64 * 1024
+_WAIT_SLICE_SECONDS = 0.05
 ENV_ALLOWLIST = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
 _VERSION_PATTERN = re.compile(r"(?<![0-9])\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?")
 _MODEL_PATTERN = re.compile(
@@ -114,6 +118,56 @@ class _ProcessResult:
     stderr: bytes
 
 
+@dataclass
+class _BoundedBuffer:
+    data: bytearray
+    overflowed: bool = False
+
+
+def _drain_limited(
+    stream: BinaryIO, buffer: _BoundedBuffer, limit: int, overflow: Event
+) -> None:
+    """Drain a child pipe without retaining more than the configured bound."""
+
+    try:
+        while True:
+            remaining = limit - len(buffer.data)
+            chunk = stream.read(min(_READ_CHUNK_BYTES, remaining + 1))
+            if not chunk:
+                return
+            if len(chunk) > remaining:
+                buffer.data.extend(chunk[:remaining])
+                buffer.overflowed = True
+                overflow.set()
+                return
+            buffer.data.extend(chunk)
+    except (OSError, ValueError):
+        # A closed pipe during termination is a bounded failure, never a
+        # reason to expose an operating-system exception to the caller.
+        buffer.overflowed = True
+        overflow.set()
+    finally:
+        stream.close()
+
+
+def _terminate_process(process: subprocess.Popen[bytes]) -> None:
+    try:
+        process.terminate()
+    except OSError:
+        pass
+    try:
+        process.wait(timeout=0.5)
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        try:
+            process.wait(timeout=0.5)
+        except subprocess.TimeoutExpired:
+            pass
+
+
 def _digest(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
@@ -132,23 +186,69 @@ def _run_bounded(
     if not isinstance(cwd, Path) or not cwd.is_absolute() or not cwd.is_dir():
         raise AdapterError("ADAPTER_WORKSPACE_INVALID")
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             list(argv),
             cwd=cwd,
             stdin=subprocess.DEVNULL,
-            capture_output=True,
-            timeout=timeout_seconds,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             shell=False,
             env=_safe_environment(),
         )
     except FileNotFoundError as exc:
         raise AdapterError("ADAPTER_BINARY_NOT_FOUND") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise AdapterError("ADAPTER_TIMEOUT") from exc
     except (OSError, ValueError) as exc:
         raise AdapterError("ADAPTER_EXECUTION_FAILED") from exc
-    return _ProcessResult(completed.returncode, completed.stdout, completed.stderr)
+    if process.stdout is None or process.stderr is None:
+        _terminate_process(process)
+        raise AdapterError("ADAPTER_EXECUTION_FAILED")
+
+    overflow = Event()
+    stdout_buffer = _BoundedBuffer(bytearray())
+    stderr_buffer = _BoundedBuffer(bytearray())
+    readers = (
+        Thread(
+            target=_drain_limited,
+            args=(process.stdout, stdout_buffer, MAX_EVENT_BYTES, overflow),
+            daemon=True,
+        ),
+        Thread(
+            target=_drain_limited,
+            args=(process.stderr, stderr_buffer, MAX_EVENT_BYTES, overflow),
+            daemon=True,
+        ),
+    )
+    for reader in readers:
+        reader.start()
+
+    try:
+        deadline = time.monotonic() + timeout_seconds
+        while process.poll() is None:
+            if overflow.is_set():
+                _terminate_process(process)
+                raise AdapterError("ADAPTER_OUTPUT_LIMIT")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _terminate_process(process)
+                raise AdapterError("ADAPTER_TIMEOUT")
+            try:
+                process.wait(timeout=min(remaining, _WAIT_SLICE_SECONDS))
+            except subprocess.TimeoutExpired:
+                continue
+        if overflow.is_set() or stdout_buffer.overflowed or stderr_buffer.overflowed:
+            raise AdapterError("ADAPTER_OUTPUT_LIMIT")
+    finally:
+        if process.poll() is None:
+            _terminate_process(process)
+        for reader in readers:
+            reader.join(timeout=1.0)
+    if overflow.is_set() or stdout_buffer.overflowed or stderr_buffer.overflowed:
+        raise AdapterError("ADAPTER_OUTPUT_LIMIT")
+    return _ProcessResult(
+        process.returncode if process.returncode is not None else 1,
+        bytes(stdout_buffer.data),
+        bytes(stderr_buffer.data),
+    )
 
 
 def _json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

@@ -17,6 +17,7 @@ from contractcapsule.compile.evidence import NativeEvidenceResolver
 from contractcapsule.compile.renderers import NeutralViewRenderer
 from contractcapsule.mcp.server import MCPService, handle_request
 from contractcapsule.models.base import Principal
+from contractcapsule.models.canonical import canonical_json_bytes
 from contractcapsule.models.view import (
     CompileRequest,
     EvidenceHandle,
@@ -25,9 +26,18 @@ from contractcapsule.models.view import (
     ViewBudget,
     view_manifest_digest,
 )
-from contractcapsule.resolve.policies import StaticEligibilityAuthorizer
+from contractcapsule.resolve.policies import StaticEligibilityAuthorizer, capsule_ref
 from contractcapsule.resolve.rank import FTS5BM25Ranker
 from contractcapsule.storage.registry import PublishedCapsule
+from contractcapsule.swap.controller import SwapController
+from contractcapsule.swap.runtime_models import (
+    ActiveBinding,
+    BoundaryTicket,
+    PreparedReplacement,
+    RuntimeScope,
+)
+from contractcapsule.swap.store import RuntimeStore
+from contractcapsule.validate.run_models import digest_bytes
 from tests.m4_helpers import M4Fixture
 from tests.unit.test_eligibility import AS_OF, access_grant, freshness_for, task_context
 
@@ -57,20 +67,6 @@ class _EvidenceSpy:
         return EvidenceMaterial(handle=handle, excerpt="Rule 0", full_text="Rule 0\n")
 
 
-class _SwapSpy:
-    def __init__(self) -> None:
-        self.activations: list[tuple[object, ...]] = []
-        self.rollbacks: list[tuple[object, ...]] = []
-
-    def activate(self, *args: object) -> dict[str, str]:
-        self.activations.append(args)
-        return {"receipt_id": "activation-1"}
-
-    def rollback(self, *args: object) -> dict[str, str]:
-        self.rollbacks.append(args)
-        return {"receipt_id": "rollback-1"}
-
-
 def _compiler(
     fixture: M4Fixture, publication: PublishedCapsule
 ) -> tuple[ViewCompiler, TaskContext]:
@@ -87,6 +83,60 @@ def _compiler(
         renderer=NeutralViewRenderer(),
     )
     return compiler, task_context(text="token")
+
+
+def _real_swap(
+    root: Path, publication: PublishedCapsule
+) -> tuple[SwapController, RuntimeStore, RuntimeScope, ActiveBinding, BoundaryTicket]:
+    now = datetime(2030, 1, 1, tzinfo=UTC)
+    scope = RuntimeScope(
+        tenant="example",
+        principal="reader",
+        repository="example/api",
+        environment="prod",
+        session="m6-vertical",
+    )
+    old_binding = ActiveBinding(
+        capsule=capsule_ref(publication.capsule),
+        view_digest="sha256:" + "a" * 64,
+        input_digest="sha256:" + "b" * 64,
+        generation=0,
+    )
+    store = RuntimeStore(
+        root / "runtime.sqlite3",
+        b"r" * 32,
+        clock=lambda: now,
+        binding_validator=lambda _scope, _binding: True,
+        termination_validator=lambda _scope, _operation, _proof: True,
+    )
+    store.initialize(scope, old_binding, store.issue_bootstrap(scope, old_binding))
+    request_digest = digest_bytes(canonical_json_bytes({"operation": "m6-vertical"}))
+    lease = store.begin_action(scope, "op-1", request_digest)
+    store.end_action(scope, lease, outcome=b"m6-evidence")
+    ticket = store.reserve_boundary(scope, "op-1", expected_generation=0)
+    new_binding = old_binding.model_copy(
+        update={"view_digest": "sha256:" + "c" * 64, "generation": 1}
+    )
+    prepared = PreparedReplacement(
+        prepared_id="prepared-1",
+        scope_digest=scope.digest,
+        operation_id="op-1",
+        request_digest=request_digest,
+        old_binding=old_binding,
+        new_binding=new_binding,
+        evidence_digest=digest_bytes(b"m6-evidence"),
+        expires_at="2030-01-01T00:10:00Z",
+        payload=b"m6-evidence",
+    )
+    controller = SwapController(
+        store,
+        scope,
+        validator=lambda record: record.evidence_digest == digest_bytes(b"m6-evidence"),
+        rollback_validator=lambda _receipt: True,
+        clock=lambda: now,
+    )
+    controller.prepare(prepared)
+    return controller, store, scope, old_binding, ticket
 
 
 def _fake_codex(path: Path, marker: Path) -> Path:
@@ -118,7 +168,7 @@ def test_m6_vertical_slice_gates_agent_and_preserves_public_identity(tmp_path: P
     )
     compiler, task = _compiler(fixture, publication)
     evidence = _EvidenceSpy()
-    swap = _SwapSpy()
+    swap, store, scope, old_binding, ticket = _real_swap(tmp_path, publication)
     service = MCPService(
         registry=fixture.registry,
         compiler=compiler,
@@ -233,36 +283,38 @@ def test_m6_vertical_slice_gates_agent_and_preserves_public_identity(tmp_path: P
 
     # The MCP boundary still delegates replacement; it does not let the
     # adapter mutate the active pointer directly.
-    ticket = {
-        "ticket_id": "ticket-1",
-        "scope_digest": "sha256:" + "a" * 64,
-        "expected_generation": 0,
-        "action_epoch": 0,
-        "operation_id": "op-1",
-        "expires_at": "2030-01-01T00:01:00Z",
-        "signature": "sha256:" + "c" * 64,
-    }
     activated = handle_request(
         service,
         {
             "jsonrpc": "2.0",
             "id": 4,
             "method": "activate_capsule",
-            "params": {"prepared_id": "prepared-1", "ticket": ticket},
+            "params": {
+                "principal_id": "reader",
+                "prepared_id": "prepared-1",
+                "ticket": ticket.model_dump(mode="json"),
+            },
         },
     )
+    activated_result = cast(dict[str, Any], activated["result"])
+    activation_receipt = cast(dict[str, Any], activated_result["receipt"])
+    rollback_ticket = store.reserve_boundary(scope, "op-1", expected_generation=1)
     rolled_back = handle_request(
         service,
         {
             "jsonrpc": "2.0",
             "id": 5,
             "method": "rollback_capsule",
-            "params": {"receipt_id": "activation-1", "ticket": ticket},
+            "params": {
+                "principal_id": "reader",
+                "receipt_id": activation_receipt["receipt_id"],
+                "ticket": rollback_ticket.model_dump(mode="json"),
+            },
         },
     )
-    activated_result = cast(dict[str, Any], activated["result"])
     rolled_back_result = cast(dict[str, Any], rolled_back["result"])
-    assert cast(dict[str, Any], activated_result["receipt"])["receipt_id"] == "activation-1"
-    assert cast(dict[str, Any], rolled_back_result["receipt"])["receipt_id"] == "rollback-1"
-    assert len(swap.activations) == 1
-    assert len(swap.rollbacks) == 1
+    assert activation_receipt["prepared_id"] == "prepared-1"
+    assert cast(dict[str, Any], rolled_back_result["receipt"])[
+        "source_receipt_id"
+    ] == activation_receipt["receipt_id"]
+    assert store.get(scope).active == old_binding.model_copy(update={"generation": 2})
