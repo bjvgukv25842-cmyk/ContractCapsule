@@ -34,7 +34,8 @@ schemas were unchanged.
 3. **F3/G1 — real-provider run:** no code defect was found, but the frozen G1
    gate remains open. Fake executables are used for deterministic tests; a real
    Codex/Claude old/new task and approved `agents.yaml` model/version freeze
-   have not been performed. This is not reported as an experiment result.
+   have not been performed. Installed `--version` strings alone are not a
+   model/version freeze. This is not reported as an experiment result.
 
 ## Reverification
 
@@ -48,4 +49,3 @@ schemas were unchanged.
 
 No files were modified by the independent reviewer. M7 and formal experiments
 remain unstarted pending the G1/author exit decision.
-

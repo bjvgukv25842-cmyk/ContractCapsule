@@ -248,6 +248,7 @@ mechanism results; they are not formal benchmark observations.
 | RQ2 selection/traceability | MCP compile/expand path preserves manifest and evidence-handle identity; vertical fixture checks digest equality | Human corpus adjudication and empirical critical-atom recall |
 | RQ3 behavior | M6 exposes the safe execution boundary and delegates replacement; no behavior score is produced | M7-M10 benchmark, baselines, and statistical analysis |
 
-M6 G1 is explicitly open: no approved live Codex/Claude binaries or
-`experiments/configs/agents.yaml` freeze was available. No formal experiment,
+M6 G1 is explicitly open: installed CLI version strings are not an approved
+model/version freeze, and no real-agent run or `experiments/configs/agents.yaml`
+record is available. No formal experiment,
 TER/PIP/BSR result, or M7 implementation is claimed.

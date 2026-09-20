@@ -1538,7 +1538,7 @@
   whitespace. The independent read-only reviewer returned **PASS** for the
   exact commit and found no unresolved code or security issue.
 - This is engineering evidence, not a formal experiment. G1 remains open:
-  approved real Codex/Claude binaries and `experiments/configs/agents.yaml`
-  model/version freezing are unavailable. No TER/PIP/BSR, cross-agent result,
+  installed CLI version strings are not an approved model/version freeze, and
+  no real Codex/Claude run or `experiments/configs/agents.yaml` record exists. No TER/PIP/BSR, cross-agent result,
   or M7 implementation is claimed. The author M6 exit decision remains a
   separate gate.

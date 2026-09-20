@@ -12,8 +12,9 @@ Skill, or start a benchmark experiment.
 
 The exact technical candidate is `4396115abb5d909d3ed6001bca07908f706f93fa`.
 The independent read-only audit of that exact commit is **PASS**. The frozen
-G1 real-agent run remains outstanding because this environment has no approved
-Codex/Claude binaries or `experiments/configs/agents.yaml` version freeze.
+G1 real-agent run remains outstanding: installed CLI version strings are not a
+model/version freeze, and no approved real-agent execution or
+`experiments/configs/agents.yaml` record exists.
 
 ## Delivered modules
 
@@ -98,4 +99,3 @@ M7 has not started.
 - `2cf3728` — deterministic vertical slice and date-stable regressions.
 - `3381e27` — bounded output enforcement and real SwapController path.
 - `4396115` — behavior-preserving bounded-runner complexity split.
-
