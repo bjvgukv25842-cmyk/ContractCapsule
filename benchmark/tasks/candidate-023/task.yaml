@@ -14,4 +14,3 @@ checks:
   invariant: []
   spillover: []
 candidate_reason: screened candidate; immutable source, license, and executable gold truth require human verification
-
