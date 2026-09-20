@@ -43,6 +43,16 @@ def _now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _tuplify(value: Any) -> Any:
+    """Normalize JSON/YAML arrays before strict tuple validation."""
+
+    if isinstance(value, list):
+        return tuple(_tuplify(item) for item in value)
+    if isinstance(value, dict):
+        return {key: _tuplify(item) for key, item in value.items()}
+    return value
+
+
 class UsageRecord(ExperimentModel):
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
@@ -88,9 +98,13 @@ class ExperimentConfig(ExperimentModel):
             raise ValueError("configuration strings must not be blank")
         return value
 
-    @field_validator("conditions")
+    @field_validator("conditions", mode="before")
     @classmethod
-    def _conditions(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+    def _conditions(cls, value: object) -> tuple[str, ...]:
+        if isinstance(value, list):
+            value = tuple(value)
+        if not isinstance(value, tuple):
+            raise TypeError("conditions must be a tuple or list")
         if not value or len(set(value)) != len(value):
             raise ValueError("conditions must be non-empty and unique")
         allowed = {"B0", "B1", "B2", "B3", "B4", "CC"}
@@ -144,6 +158,15 @@ class PreflightReceipt(ExperimentModel):
     signature: str | None = None
     digest: str | None = None
 
+    @field_validator("capabilities", mode="before")
+    @classmethod
+    def _capability_tuple(cls, value: object) -> tuple[str, ...]:
+        if isinstance(value, list):
+            value = tuple(value)
+        if not isinstance(value, tuple):
+            raise TypeError("capabilities must be a tuple or list")
+        return value
+
     @field_validator("config_digest", "digest")
     @classmethod
     def _receipt_digest(cls, value: str | None) -> str | None:
@@ -194,6 +217,15 @@ class RunRecord(ExperimentModel):
     started_at: str | None = None
     finished_at: str | None = None
 
+    @field_validator("capsule_digests", mode="before")
+    @classmethod
+    def _capsule_tuple(cls, value: object) -> tuple[str, ...]:
+        if isinstance(value, list):
+            value = tuple(value)
+        if not isinstance(value, tuple):
+            raise TypeError("capsule_digests must be a tuple or list")
+        return value
+
     @field_validator("run_id", "attempt_id", "task_id", "condition", "agent")
     @classmethod
     def _ids(cls, value: str) -> str:
@@ -214,10 +246,8 @@ class RunRecord(ExperimentModel):
     @field_validator("repository_commit")
     @classmethod
     def _commit(cls, value: str) -> str:
-        if not isinstance(value, str) or not value or len(value) > 128 or any(
-            char.isspace() for char in value
-        ):
-            raise ValueError("repository_commit must be a bounded immutable identifier")
+        if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", value) is None:
+            raise ValueError("repository_commit must be an immutable hash")
         return value
 
     @field_validator("prompt_digest", "view_manifest_digest", "config_digest", "preflight_digest")
@@ -249,7 +279,7 @@ class RunRecord(ExperimentModel):
         if (
             self.infrastructure_failure is False
             and self.failure_code is not None
-            and self.failure_code.startswith(("INFRA_", "ADAPTER_", "PREflight"))
+            and self.failure_code.startswith(("INFRA_", "ADAPTER_", "PREFLIGHT_"))
         ):
             # A task failure may carry a task-specific code, but never an
             # infrastructure-coded prefix.
@@ -329,6 +359,7 @@ class RunRecord(ExperimentModel):
                 "attempt_id": attempt_id,
                 "retry_of": self.run_id,
                 "attempt_number": number,
+                "raw_event_path": f"raw/{new_id}.jsonl",
             }
         )
 
@@ -355,7 +386,7 @@ class RunStore:
                 raise ValueError("blank JSONL run record")
             try:
                 value = json.loads(line, object_pairs_hook=_unique_pairs)
-                record = RunRecord.model_validate(value)
+                record = RunRecord.model_validate(_tuplify(value))
             except Exception as error:
                 raise ValueError("invalid run record") from error
             if record.run_id in self._records:
@@ -454,7 +485,7 @@ def load_config(source: Path | str | Mapping[str, Any] | ExperimentConfig) -> Ex
             raise ConfigError("config root must be an object")
         raw = dict(raw)
     try:
-        return ExperimentConfig.model_validate(raw)
+        return ExperimentConfig.model_validate(_tuplify(raw))
     except Exception as error:
         raise ConfigError("config schema validation failed") from error
 

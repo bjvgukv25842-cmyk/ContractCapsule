@@ -106,6 +106,7 @@ def test_only_infrastructure_failures_are_retryable(tmp_path: Path) -> None:
     assert retry.run_id != infra.run_id
     assert retry.attempt_id != infra.attempt_id
     assert retry.retry_of == infra.run_id
+    assert retry.raw_event_path != infra.raw_event_path
 
 
 def test_dry_run_refuses_without_preflight_receipt(tmp_path: Path) -> None:
@@ -128,6 +129,26 @@ def test_preflight_rejects_duplicate_yaml_keys_and_records_unavailable_metadata(
     assert receipt.model is None
     assert receipt.digest.startswith("sha256:")
     assert (tmp_path / "receipt.json").exists()
+
+
+def test_screening_yaml_loads_arrays_without_freezing_agent_metadata() -> None:
+    from experiments.models import load_config
+
+    config = load_config("experiments/configs/m7-screening.yaml")
+    assert config.model is None
+    assert config.version is None
+    assert config.conditions == ("B0", "B1", "B2", "B3", "B4", "CC")
+    assert config.dry_run is True
+
+
+def test_config_accepts_json_style_condition_arrays() -> None:
+    config = ExperimentConfig(
+        study_id="array-input",
+        agent="unavailable",
+        conditions=["B0", "CC"],  # type: ignore[arg-type]
+        dry_run=True,
+    )
+    assert config.conditions == ("B0", "CC")
 
 
 def test_scorer_uses_declared_relative_tests_and_ignores_condition_labels(
@@ -167,6 +188,8 @@ def test_run_record_round_trips_jsonl(tmp_path: Path) -> None:
     )
     store = RunStore(tmp_path / "runs.jsonl")
     store.append(record)
+    reopened = RunStore(tmp_path / "runs.jsonl")
+    assert reopened.get(record.run_id) == record
     loaded = RunRecord.model_validate_json(
         json.dumps(json.loads((tmp_path / "runs.jsonl").read_text()))
     )

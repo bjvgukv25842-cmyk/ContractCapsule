@@ -111,8 +111,8 @@ def load_task(task_dir: Path) -> TaskSpec:
         except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError) as error:
             raise BenchmarkLoadError("repository.lock is invalid") from error
         _validate_digest(digest)
-        expected = "sha256:" + hashlib.sha256(task_yaml.read_bytes()).hexdigest()
-        if digest != expected:
+        expected = task.repository.content_digest
+        if expected is not None and digest != expected:
             raise BenchmarkLoadError("repository lock digest mismatch")
     return task
 
@@ -130,6 +130,15 @@ def load_manifest(path: Path) -> BenchmarkManifest:
         raise BenchmarkLoadError("benchmark manifest is invalid JSON") from error
     except Exception as error:
         raise BenchmarkLoadError("benchmark manifest schema is invalid") from error
+    tasks_root = manifest_path.parent / "tasks"
+    if tasks_root.is_dir():
+        for declared in manifest.tasks:
+            package = tasks_root / declared.task_id
+            if not package.exists():
+                raise BenchmarkLoadError("manifest task package is missing")
+            loaded = load_task(package)
+            if loaded != declared:
+                raise BenchmarkLoadError("manifest task package differs from manifest")
     if manifest.manifest_digest is not None:
         payload = dict(raw)
         payload.pop("manifest_digest", None)

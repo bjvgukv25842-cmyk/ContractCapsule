@@ -1,0 +1,13 @@
+# Engineering-screening configuration only. No live provider/model is frozen here.
+study_id: m7-screening
+agent: unavailable
+model: null
+version: null
+conditions: [B0, B1, B2, B3, B4, CC]
+repetitions: 1
+runtime_budget_tokens: 2048
+timeout_seconds: 900
+manifest_path: benchmark/benchmark-manifest.json
+output_path: results/m7-screening/runs.jsonl
+dry_run: true
+live_agent: false
