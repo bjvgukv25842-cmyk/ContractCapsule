@@ -1517,3 +1517,28 @@
 - M5-5/M5-6/M5-7 technical status is PASS. The original G1/G2/G3 dates remain
   missed and were not backfilled. Formal M5 exit authorization is recorded as
   a separate governance decision; M6 implementation has not begun.
+
+## M6-001 — Agent Adapter and Boundary Candidate Independently Passed (2026-09-20)
+
+- The authorized M6 implementation is recorded at exact commit
+  `4396115abb5d909d3ed6001bca07908f706f93fa` on `codex/m6-agent-adapters`.
+  It adds bounded Codex/Claude process adapters, the six-method dependency-free
+  MCP facade, a capsule-free Skill, and a fail-closed high-risk pre-tool Hook.
+  No frozen specification, execution plan, A-zone schema, or dependency lock
+  identity changed.
+- A deterministic vertical slice covers Registry discovery, trusted compile,
+  evidence expansion, fake-agent preflight/run, receipt-gated tool use, and the
+  real M5 `RuntimeStore`/`SwapController` activation and rollback path. Output
+  limits are enforced while stdout/stderr are read; both overflow paths have
+  regressions. Two stale date fixtures were converted to explicit test clocks;
+  production expiry semantics were unchanged.
+- Exact verification includes frozen M6 tests12, adapter/vertical tests14, full
+  regression1073, formal30, schema/frozen47, Ruff and complexity scans in both
+  modes, Mypy78 source files, offline lock/build, frozen hashes, and clean
+  whitespace. The independent read-only reviewer returned **PASS** for the
+  exact commit and found no unresolved code or security issue.
+- This is engineering evidence, not a formal experiment. G1 remains open:
+  approved real Codex/Claude binaries and `experiments/configs/agents.yaml`
+  model/version freezing are unavailable. No TER/PIP/BSR, cross-agent result,
+  or M7 implementation is claimed. The author M6 exit decision remains a
+  separate gate.

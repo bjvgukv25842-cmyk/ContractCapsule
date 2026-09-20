@@ -231,3 +231,23 @@ RQ3 result.
 M5 technical status is PASS after the exact final independent audit. The author
 exit decision is kept distinct from the engineering evidence, and no M6 code or
 formal experiment is counted in this update.
+
+## M6 Engineering Evidence Pointer (2026-09-20)
+
+The implementation and independent audit are recorded in
+`research/module-reports/M6-2026-09-20-implementation.md` at exact candidate
+`4396115abb5d909d3ed6001bca07908f706f93fa`. These are boundary and safety
+mechanism results; they are not formal benchmark observations.
+
+| Claim/question | New engineering support | Still missing |
+|---|---|---|
+| C1 replacement relation | MCP activation/rollback delegates through real M5 tickets, durable receipts, generation checks, and restored old binding in the vertical fixture | Human-reviewed benchmark tasks and empirical replacement outcomes |
+| C2 mechanism | Trusted Registry revalidation, six narrow MCP methods, bounded Codex/Claude process seams, receipt-gated Hook, and 1073-test regression | G1 real-agent dual run and independent external replication |
+| C5 provenance/safety | Public projections omit keys/raw exceptions; stdout/stderr limits, secret isolation, frozen hashes, and exact audit PASS are retained | Artifact anonymization, submission-time replication, and real provider version freeze |
+| RQ1 token/cost | Existing M4 token instrumentation is carried through the compiled view; adapter usage parsing is bounded and recorded in unit fixtures | Prospective real-agent task measurements and cost comparison |
+| RQ2 selection/traceability | MCP compile/expand path preserves manifest and evidence-handle identity; vertical fixture checks digest equality | Human corpus adjudication and empirical critical-atom recall |
+| RQ3 behavior | M6 exposes the safe execution boundary and delegates replacement; no behavior score is produced | M7-M10 benchmark, baselines, and statistical analysis |
+
+M6 G1 is explicitly open: no approved live Codex/Claude binaries or
+`experiments/configs/agents.yaml` freeze was available. No formal experiment,
+TER/PIP/BSR result, or M7 implementation is claimed.
