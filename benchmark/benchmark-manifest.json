@@ -1,0 +1,488 @@
+{
+  "spec_version": "CCS-2.1",
+  "benchmark_version": "CapsuleBench-1.0-screening",
+  "status": "screening",
+  "max_view_tokens": 2048,
+  "tasks": [
+    {
+      "task_id": "candidate-001",
+      "category": "policy",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/psf/requests",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-002",
+      "category": "api",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/pallets/flask",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-003",
+      "category": "architecture",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/pytest-dev/pytest",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-004",
+      "category": "procedure",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/pydantic/pydantic",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-005",
+      "category": "policy",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/encode/httpx",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-006",
+      "category": "api",
+      "language": "rust",
+      "repository": {
+        "source_url": "https://github.com/astral-sh/ruff",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-007",
+      "category": "architecture",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/django/django",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-008",
+      "category": "procedure",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/tiangolo/fastapi",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-009",
+      "category": "policy",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/psf/requests",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-010",
+      "category": "api",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/pallets/flask",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-011",
+      "category": "architecture",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/pytest-dev/pytest",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-012",
+      "category": "procedure",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/pydantic/pydantic",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-013",
+      "category": "policy",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/encode/httpx",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-014",
+      "category": "api",
+      "language": "rust",
+      "repository": {
+        "source_url": "https://github.com/astral-sh/ruff",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-015",
+      "category": "architecture",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/django/django",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-016",
+      "category": "procedure",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/tiangolo/fastapi",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-017",
+      "category": "policy",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/psf/requests",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-018",
+      "category": "api",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/pallets/flask",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-019",
+      "category": "architecture",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/pytest-dev/pytest",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-020",
+      "category": "procedure",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/pydantic/pydantic",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-021",
+      "category": "policy",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/encode/httpx",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-022",
+      "category": "api",
+      "language": "rust",
+      "repository": {
+        "source_url": "https://github.com/astral-sh/ruff",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-023",
+      "category": "architecture",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/django/django",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    },
+    {
+      "task_id": "candidate-024",
+      "category": "procedure",
+      "language": "python",
+      "repository": {
+        "source_url": "https://github.com/tiangolo/fastapi",
+        "commit": null,
+        "license": "pending-verification",
+        "source_status": "unverified"
+      },
+      "human_approval": "pending",
+      "executable": false,
+      "max_runtime_seconds": 900,
+      "checks": {
+        "target": [],
+        "invariant": [],
+        "spillover": []
+      },
+      "candidate_reason": "screened candidate; immutable source, license, and executable gold truth require human verification"
+    }
+  ]
+}

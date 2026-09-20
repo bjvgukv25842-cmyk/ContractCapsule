@@ -1,0 +1,17 @@
+task_id: candidate-005
+category: policy
+language: python
+repository:
+  source_url: https://github.com/encode/httpx
+  commit: null
+  license: pending-verification
+  source_status: unverified
+human_approval: pending
+executable: false
+max_runtime_seconds: 900
+checks:
+  target: []
+  invariant: []
+  spillover: []
+candidate_reason: screened candidate; immutable source, license, and executable gold truth require human verification
+
