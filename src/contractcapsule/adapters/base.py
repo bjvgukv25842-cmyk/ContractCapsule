@@ -124,6 +124,14 @@ class _BoundedBuffer:
     overflowed: bool = False
 
 
+@dataclass
+class _ReaderState:
+    overflow: Event
+    stdout: _BoundedBuffer
+    stderr: _BoundedBuffer
+    readers: tuple[Thread, Thread]
+
+
 def _drain_limited(
     stream: BinaryIO, buffer: _BoundedBuffer, limit: int, overflow: Event
 ) -> None:
@@ -178,13 +186,7 @@ def _safe_environment() -> dict[str, str]:
     return {key: value for key in ENV_ALLOWLIST if (value := os.environ.get(key)) is not None}
 
 
-def _run_bounded(
-    argv: Sequence[str], *, cwd: Path, timeout_seconds: float
-) -> _ProcessResult:
-    if not argv or any(type(item) is not str or not item for item in argv):
-        raise AdapterError("ADAPTER_ARGUMENTS_INVALID")
-    if not isinstance(cwd, Path) or not cwd.is_absolute() or not cwd.is_dir():
-        raise AdapterError("ADAPTER_WORKSPACE_INVALID")
+def _launch_process(argv: Sequence[str], cwd: Path) -> subprocess.Popen[bytes]:
     try:
         process = subprocess.Popen(
             list(argv),
@@ -202,7 +204,12 @@ def _run_bounded(
     if process.stdout is None or process.stderr is None:
         _terminate_process(process)
         raise AdapterError("ADAPTER_EXECUTION_FAILED")
+    return process
 
+
+def _start_readers(process: subprocess.Popen[bytes]) -> _ReaderState:
+    if process.stdout is None or process.stderr is None:
+        raise AdapterError("ADAPTER_EXECUTION_FAILED")
     overflow = Event()
     stdout_buffer = _BoundedBuffer(bytearray())
     stderr_buffer = _BoundedBuffer(bytearray())
@@ -220,34 +227,55 @@ def _run_bounded(
     )
     for reader in readers:
         reader.start()
+    return _ReaderState(overflow, stdout_buffer, stderr_buffer, readers)
 
-    try:
-        deadline = time.monotonic() + timeout_seconds
-        while process.poll() is None:
-            if overflow.is_set():
-                _terminate_process(process)
-                raise AdapterError("ADAPTER_OUTPUT_LIMIT")
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                _terminate_process(process)
-                raise AdapterError("ADAPTER_TIMEOUT")
-            try:
-                process.wait(timeout=min(remaining, _WAIT_SLICE_SECONDS))
-            except subprocess.TimeoutExpired:
-                continue
-        if overflow.is_set() or stdout_buffer.overflowed or stderr_buffer.overflowed:
-            raise AdapterError("ADAPTER_OUTPUT_LIMIT")
-    finally:
-        if process.poll() is None:
+
+def _wait_bounded(
+    process: subprocess.Popen[bytes], state: _ReaderState, timeout_seconds: float
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while process.poll() is None:
+        if state.overflow.is_set():
             _terminate_process(process)
-        for reader in readers:
-            reader.join(timeout=1.0)
-    if overflow.is_set() or stdout_buffer.overflowed or stderr_buffer.overflowed:
+            raise AdapterError("ADAPTER_OUTPUT_LIMIT")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            _terminate_process(process)
+            raise AdapterError("ADAPTER_TIMEOUT")
+        try:
+            process.wait(timeout=min(remaining, _WAIT_SLICE_SECONDS))
+        except subprocess.TimeoutExpired:
+            continue
+    if state.overflow.is_set() or state.stdout.overflowed or state.stderr.overflowed:
+        raise AdapterError("ADAPTER_OUTPUT_LIMIT")
+
+
+def _close_readers(process: subprocess.Popen[bytes], state: _ReaderState) -> None:
+    if process.poll() is None:
+        _terminate_process(process)
+    for reader in state.readers:
+        reader.join(timeout=1.0)
+
+
+def _run_bounded(
+    argv: Sequence[str], *, cwd: Path, timeout_seconds: float
+) -> _ProcessResult:
+    if not argv or any(type(item) is not str or not item for item in argv):
+        raise AdapterError("ADAPTER_ARGUMENTS_INVALID")
+    if not isinstance(cwd, Path) or not cwd.is_absolute() or not cwd.is_dir():
+        raise AdapterError("ADAPTER_WORKSPACE_INVALID")
+    process = _launch_process(argv, cwd)
+    state = _start_readers(process)
+    try:
+        _wait_bounded(process, state, timeout_seconds)
+    finally:
+        _close_readers(process, state)
+    if state.overflow.is_set() or state.stdout.overflowed or state.stderr.overflowed:
         raise AdapterError("ADAPTER_OUTPUT_LIMIT")
     return _ProcessResult(
         process.returncode if process.returncode is not None else 1,
-        bytes(stdout_buffer.data),
-        bytes(stderr_buffer.data),
+        bytes(state.stdout.data),
+        bytes(state.stderr.data),
     )
 
 
