@@ -139,6 +139,8 @@ class ExperimentConfig(ExperimentModel):
             raise ValueError("live_agent requires preflight_receipt")
         if self.live_agent and (self.model is None or self.version is None):
             raise ValueError("live_agent requires frozen model and version")
+        if self.live_agent and self.binary is None:
+            raise ValueError("live_agent requires a frozen adapter binary")
         return self
 
     @property
@@ -157,6 +159,7 @@ class PreflightReceipt(ExperimentModel):
     version: str | None = None
     model: str | None = None
     binary: str | None = None
+    binary_digest: str | None = None
     capabilities: tuple[str, ...] = ()
     available: bool = False
     error_code: str | None = None
@@ -172,7 +175,7 @@ class PreflightReceipt(ExperimentModel):
             raise TypeError("capabilities must be a tuple or list")
         return value
 
-    @field_validator("config_digest", "digest", "signature")
+    @field_validator("config_digest", "digest", "signature", "binary_digest")
     @classmethod
     def _receipt_digest(cls, value: str | None) -> str | None:
         if value is not None and _DIGEST.fullmatch(value) is None:
@@ -183,6 +186,8 @@ class PreflightReceipt(ExperimentModel):
     def _availability(self) -> PreflightReceipt:
         if self.available and (not self.version or not self.model):
             raise ValueError("available receipt requires observed version and model")
+        if self.available and (not self.binary or self.binary_digest is None):
+            raise ValueError("available receipt requires a binary digest")
         if self.available and self.error_code is not None:
             raise ValueError("available receipt cannot carry an error")
         return self
@@ -316,6 +321,8 @@ class RunRecord(ExperimentModel):
         if self.infrastructure_failure:
             if self.task_outcome != "unknown" or self.failure_code is None:
                 raise ValueError("infrastructure failures must have unknown task outcome")
+            if self.exit_code == 0:
+                raise ValueError("infrastructure failures require a nonzero exit code")
             if not (
                 self.failure_code.startswith(infrastructure_prefix)
                 or self.failure_code in {"TIMEOUT", "EXECUTION_FAILED"}

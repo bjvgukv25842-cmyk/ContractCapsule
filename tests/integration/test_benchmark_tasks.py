@@ -134,6 +134,42 @@ def test_task_loader_rejects_symlinked_task_yaml(tmp_path: Path) -> None:
         load_task(task_dir)
 
 
+def test_approved_task_requires_complete_capsulebench_package_layout(tmp_path: Path) -> None:
+    task_dir = tmp_path / "approved-task"
+    task_dir.mkdir()
+    digest = "sha256:" + "1" * 64
+    task_yaml = """\
+task_id: approved-task
+category: policy
+language: python
+repository:
+  source_url: https://github.com/example/project
+  commit: {commit}
+  license: MIT
+  source_status: verified
+  content_digest: {digest}
+human_approval: approved
+executable: true
+max_runtime_seconds: 900
+checks:
+  target:
+    - check_id: target
+      command: [pytest, tests/target/test.py]
+  invariant:
+    - check_id: invariant
+      command: [pytest, tests/invariant/test.py]
+  spillover:
+    - check_id: spillover
+      command: [pytest, tests/spillover/test.py]
+""".format(commit="a" * 40, digest=digest)
+    (task_dir / "task.yaml").write_text(task_yaml, encoding="utf-8")
+    (task_dir / "repository.lock").write_text(
+        json.dumps({"content_digest": digest}), encoding="utf-8"
+    )
+    with pytest.raises(BenchmarkLoadError, match="required"):
+        load_task(task_dir)
+
+
 def test_check_spec_is_condition_blind_and_shell_free() -> None:
     check = CheckSpec(check_id="target", command=("pytest", "tests/test_target.py"))
     assert check.shell is False

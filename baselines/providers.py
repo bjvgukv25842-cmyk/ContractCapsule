@@ -20,6 +20,8 @@ from types import MappingProxyType
 from typing import Any, ClassVar
 
 from contractcapsule.models.view import CompiledView, view_manifest_digest
+from contractcapsule.validate.integrity import ValidationService
+from contractcapsule.validate.reports import CompressionReport
 
 from .budget import (
     Budget,
@@ -276,6 +278,11 @@ class ContextProvider(ABC):
             "budget_digest": budget_digest(normalized),
             "tokenizer": "ccs-neutral-o200k/1.0.0",
         }
+        if (
+            len(source_paths) == 1
+            and source_paths[0].startswith("compiled-view:")
+        ):
+            metadata["view_manifest_digest"] = source_paths[0].split(":", 1)[1]
         return ContextArtifact(
             condition=self.condition,
             content=payload,
@@ -363,6 +370,14 @@ def _task_root(task: object) -> Path | None:
     root = Path(value).expanduser()
     if not root.is_absolute():
         root = Path.cwd() / root
+    # A provider may be called directly, without the benchmark loader's
+    # package-root checks. Reject symlink components before resolving so a
+    # caller cannot redirect a task package to an unrelated directory.
+    probe = Path(root.anchor)
+    for part in root.parts[1:]:
+        probe /= part
+        if probe.is_symlink():
+            raise ProviderError("task package root must not contain symlinks")
     try:
         root = root.resolve(strict=True)
     except OSError as error:
@@ -452,9 +467,13 @@ def _sanitize(raw: str, *, p0: bool) -> str:
         raise ProviderError("context file is not valid UTF-8") from error
     lines: list[str] = []
     for line in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-        # P0 affects retention and overflow only. It never grants permission
-        # to carry benchmark labels or condition instructions into a view.
-        if _GOLD_MARKER.search(line) or _CONDITION_TOKEN.search(line):
+        has_forbidden_marker = _GOLD_MARKER.search(line) or _CONDITION_TOKEN.search(line)
+        # P0 is exact material. Silently deleting a marked line would turn a
+        # failed integrity check into a successful but incomplete view.
+        if p0 and has_forbidden_marker:
+            raise ProviderError("declared P0 context contains a gold or condition marker")
+        # Non-P0 material is filtered so benchmark labels cannot enter a view.
+        if has_forbidden_marker:
             continue
         lines.append(line.rstrip())
     text = "\n".join(lines).strip()
@@ -715,24 +734,51 @@ class ContractCapsuleProvider(ContextProvider):
         if not _task_approved(task):
             raise ProviderError("CC requires an approved executable task and compiled view manifest")
         compiled = _lookup(task, "compiled_view")
-        if not isinstance(compiled, CompiledView) or not compiled.validation.valid:
+        if type(compiled) is not CompiledView or not compiled.validation.valid:
             raise ProviderError("CC requires a validated compiled view manifest")
+        service = _lookup(task, "compiled_view_service", "validation_service")
+        capsules = _lookup(task, "compiled_view_capsules", "capsules")
+        if type(service) is not ValidationService:
+            raise ProviderError("CC requires an independent validation service proof")
+        if type(capsules) is not list or not capsules:
+            raise ProviderError("CC requires the exact validated capsule list")
         task_id = _lookup(task, "task_id")
-        if task_id is not None and compiled.manifest.task_id != task_id:
+        try:
+            request = service.request
+            request_task_id = request.task.task_id
+            request_budget = request.budget.available
+        except Exception as error:
+            raise ProviderError("CC validation service request is invalid") from error
+        if task_id is None or request_task_id != task_id or compiled.manifest.task_id != task_id:
             raise ProviderError("compiled view task binding mismatch")
-        expected_manifest = _lookup(task, "compiled_view_manifest_digest")
         actual_manifest = view_manifest_digest(compiled.manifest)
-        if expected_manifest != actual_manifest:
-            raise ProviderError("compiled view manifest digest mismatch")
+        if request_budget != budget.max_tokens:
+            raise ProviderError("compiled view budget binding mismatch")
+        if compiled.manifest.model_id != request.model_id:
+            raise ProviderError("compiled view model binding mismatch")
+        if compiled.manifest.tokenizer_profile != request.tokenizer_profile:
+            raise ProviderError("compiled view tokenizer binding mismatch")
+        if compiled.manifest.renderer_version != request.renderer_version:
+            raise ProviderError("compiled view renderer binding mismatch")
+        if compiled.manifest.tokens.available != budget.max_tokens:
+            raise ProviderError("compiled view budget mismatch")
+        try:
+            report = service.validate_compression(compiled, capsules)
+            if type(report) is not CompressionReport or not report.valid:
+                raise ProviderError("independent CCS compression validation failed")
+            service.verify_report(report, capsules, view=compiled)
+        except ProviderError:
+            raise
+        except Exception as error:
+            raise ProviderError("independent CCS compression validation failed") from error
         token_count = count_tokens(compiled.content)
         if token_count != compiled.manifest.tokens.total:
             raise ProviderError("compiled view token accounting mismatch")
-        if compiled.manifest.tokens.available != budget.max_tokens:
-            raise ProviderError("compiled view budget mismatch")
         if token_count > budget.max_tokens:
             raise BudgetOverflow("p0_budget_overflow")
-        sanitized = _sanitize(compiled.content, p0=True)
-        if sanitized != compiled.content:
+        if _GOLD_MARKER.search(compiled.content) or _CONDITION_TOKEN.search(
+            compiled.content
+        ):
             raise ProviderError("compiled view contains condition or gold markers")
         # The compiler has already performed closure/P0 selection. Treat the
         # resulting view as mandatory so this provider can never trim it.

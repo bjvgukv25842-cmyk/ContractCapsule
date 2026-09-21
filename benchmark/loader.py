@@ -93,6 +93,63 @@ def _contained_file(root: Path, relative: str) -> Path:
     return candidate
 
 
+def _package_entry(root: Path, relative: str, *, directory: bool) -> Path:
+    """Resolve a required package entry without following symlink components."""
+
+    raw = Path(relative)
+    probe = root
+    for part in raw.parts:
+        probe = probe / part
+        if probe.is_symlink():
+            raise BenchmarkLoadError("symlinked task package entries are not allowed")
+    candidate = _contained_file(root, relative)
+    if directory and not candidate.is_dir():
+        raise BenchmarkLoadError(f"required task package directory is missing: {relative}")
+    if not directory and not candidate.is_file():
+        raise BenchmarkLoadError(f"required task package file is missing: {relative}")
+    return candidate
+
+
+def _has_regular_files(path: Path) -> bool:
+    return any(
+        item.is_file() and not item.is_symlink()
+        for item in path.rglob("*")
+    )
+
+
+def _require_complete_package(root: Path) -> None:
+    """Approved tasks must contain the complete frozen CapsuleBench layout."""
+
+    for relative in (
+        "capsules/old",
+        "capsules/new",
+        "gold",
+        "tests",
+        "tests/target",
+        "tests/invariant",
+        "tests/spillover",
+        "licenses",
+    ):
+        directory = _package_entry(root, relative, directory=True)
+        if relative.startswith(("capsules/", "tests/", "gold", "licenses")) and not _has_regular_files(
+            directory
+        ):
+            raise BenchmarkLoadError(
+                f"required task package directory is empty: {relative}"
+            )
+    for relative in (
+        "prompt.md",
+        "gold/required-atoms.json",
+        "gold/target-effects.yaml",
+        "gold/protected-invariants.yaml",
+        "gold/forbidden-spillover.yaml",
+        "licenses/provenance.json",
+    ):
+        entry = _package_entry(root, relative, directory=False)
+        if not entry.read_bytes():
+            raise BenchmarkLoadError(f"required task package file is empty: {relative}")
+
+
 def load_task(task_dir: Path) -> TaskSpec:
     """Load one task package without following paths outside its root."""
 
@@ -134,6 +191,8 @@ def load_task(task_dir: Path) -> TaskSpec:
             raise BenchmarkLoadError("repository lock digest mismatch")
     elif task.human_approval.value == "approved":
         raise BenchmarkLoadError("approved task repository.lock is missing")
+    if task.human_approval.value == "approved":
+        _require_complete_package(root)
     return task
 
 

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import shutil
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,30 @@ from experiments.models import (
 
 class PreflightError(ValueError):
     """The adapter/config preflight could not produce a trusted receipt."""
+
+
+def binary_digest(binary: str | None) -> str | None:
+    """Hash the exact executable selected by the frozen config/PATH."""
+
+    if not isinstance(binary, str) or not binary or "\x00" in binary:
+        return None
+    candidate = Path(binary)
+    if not candidate.is_absolute():
+        resolved = shutil.which(binary)
+        if resolved is None:
+            return None
+        candidate = Path(resolved)
+    try:
+        candidate = candidate.resolve(strict=True)
+    except OSError:
+        return None
+    if not candidate.is_file():
+        return None
+    try:
+        data = candidate.read_bytes()
+    except OSError:
+        return None
+    return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 def _metadata(
@@ -100,6 +126,22 @@ def preflight_config(
     ):
         version, model, capabilities = None, None, ()
         error_code, available = "PREFLIGHT_CONFIG_MISMATCH", False
+    configured_binary = parsed.binary
+    adapter_binary = getattr(adapter, "binary", None) if adapter is not None else None
+    observed_binary_digest = binary_digest(configured_binary)
+    if available and (
+        configured_binary is None
+        or (binary is not None and binary != configured_binary)
+        or (adapter_binary is not None and adapter_binary != configured_binary)
+        or observed_binary_digest is None
+    ):
+        version, model, capabilities = None, None, ()
+        error_code, available = (
+            "PREFLIGHT_BINARY_UNAVAILABLE"
+            if observed_binary_digest is None
+            else "PREFLIGHT_BINARY_MISMATCH",
+            False,
+        )
     if available and (type(signing_key) is not bytes or len(signing_key) < 32):
         version, model, capabilities = None, None, ()
         error_code, available = "PREFLIGHT_SIGNING_KEY_REQUIRED", False
@@ -108,7 +150,8 @@ def preflight_config(
         agent=parsed.agent,
         version=version,
         model=model,
-        binary=binary or parsed.binary,
+        binary=configured_binary,
+        binary_digest=observed_binary_digest if available else None,
         capabilities=capabilities,
         available=available,
         error_code=error_code,
@@ -161,6 +204,15 @@ def validate_receipt(
     if require_available and not loaded.available:
         raise PreflightError("adapter preflight is unavailable")
     if loaded.available:
+        if parsed.binary is None or loaded.binary != parsed.binary:
+            raise PreflightError("available preflight requires a frozen binary")
+        current_binary_digest = binary_digest(parsed.binary)
+        if (
+            loaded.binary_digest is None
+            or current_binary_digest is None
+            or loaded.binary_digest != current_binary_digest
+        ):
+            raise PreflightError("preflight binary digest mismatch")
         if type(signing_key) is not bytes or len(signing_key) < 32:
             raise PreflightError("preflight signing key is required")
         if not loaded.verify_signature(signing_key):
@@ -185,4 +237,10 @@ if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
 
 
-__all__ = ["PreflightError", "load_receipt", "preflight_config", "validate_receipt"]
+__all__ = [
+    "PreflightError",
+    "binary_digest",
+    "load_receipt",
+    "preflight_config",
+    "validate_receipt",
+]

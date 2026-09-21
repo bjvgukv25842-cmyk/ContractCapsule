@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -42,6 +43,8 @@ class FixtureTask:
     p0_paths: tuple[str, ...] = ()
     compiled_view: CompiledView | None = None
     compiled_view_manifest_digest: str | None = None
+    compiled_view_service: object | None = None
+    compiled_view_capsules: list[object] | None = None
 
     def __post_init__(self) -> None:
         if self.compiled_view is None:
@@ -123,6 +126,10 @@ def test_all_conditions_share_provider_interface_and_are_condition_blind(
     for condition in Condition:
         provider = provider_for(condition)
         assert isinstance(provider, ContextProvider)
+        if condition is Condition.CC:
+            with pytest.raises(ProviderError, match="independent"):
+                provider.provide(task, budget=256)
+            continue
         artifact = provider.provide(task, budget=256)
         artifacts.append(artifact)
         assert artifact.condition is condition
@@ -180,6 +187,96 @@ def test_cc_requires_a_validated_compiled_view(task: FixtureTask) -> None:
     object.__setattr__(invalid, "compiled_view", "untrusted text")
     with pytest.raises(ProviderError, match="compiled view manifest"):
         provider_for(Condition.CC).provide(invalid, budget=256)
+
+
+def test_cc_rejects_a_nominal_self_constructed_view(task: FixtureTask) -> None:
+    """A structural CompiledView is not an independent CCS validation proof."""
+
+    with pytest.raises(ProviderError, match="independent"):
+        provider_for(Condition.CC).provide(task, budget=256)
+
+
+def test_cc_accepts_only_an_independently_validated_view(tmp_path: Path) -> None:
+    from contractcapsule.compile.budget import LocalTokenCounter
+    from contractcapsule.models.view import ViewBudget
+    from contractcapsule.validate.artifacts import LocalArtifactResolver
+    from contractcapsule.validate.integrity import ValidationService
+    from contractcapsule.validate.journal import RecordJournal
+    from tests.integration.test_compile_view import pipeline
+    from tests.m4_helpers import M4Fixture
+    from tests.unit.test_eligibility import AS_OF
+
+    fixture = M4Fixture.create(tmp_path / "m4")
+    publication = fixture.publish(
+        atoms=(
+            {
+                "statement": "The audit rule remains enabled.\n",
+                "compression_class": "P0_EXACT",
+            },
+        )
+    )
+    counter = LocalTokenCounter("offline-test-model")
+    compiler, request = pipeline(fixture, (publication,), counter)
+    request = request.model_copy(
+        update={
+            "budget": ViewBudget(model_input_tokens=10000),
+            "task": request.task.model_copy(update={"task_id": "fixture-task"}),
+        }
+    )
+    compiled = compiler.compile_view(request)
+    assert compiled.validation.valid
+    service = ValidationService(
+        request,
+        compiler,
+        LocalArtifactResolver(
+            {
+                publication.capsule.control_manifest.content_digest: tmp_path
+                / "m4"
+                / "publication-1"
+            }
+        ),
+        RecordJournal(fixture.registry, b"p" * 32),
+        lambda: datetime.fromisoformat(AS_OF),
+    )
+    root = tmp_path / "package"
+    root.mkdir()
+    task = FixtureTask(
+        task_id="fixture-task",
+        package_root=root,
+        context_files=(),
+        compiled_view=compiled,
+        compiled_view_service=service,
+        compiled_view_capsules=[publication.capsule],
+    )
+    artifact = provider_for(Condition.CC).provide(task, budget=10000)
+    assert artifact.metadata["view_manifest_digest"].startswith("sha256:")
+
+
+def test_declared_p0_marker_is_rejected_instead_of_silently_dropped(
+    task: FixtureTask,
+) -> None:
+    path = task.package_root / "declared-p0.md"
+    path.write_text("B0 must remain exact and cannot be removed.\n", encoding="utf-8")
+    p0_task = FixtureTask(
+        task_id=task.task_id,
+        package_root=task.package_root,
+        context_files=("declared-p0.md",),
+        p0_paths=("declared-p0.md",),
+    )
+    with pytest.raises(ProviderError, match="P0"):
+        provider_for(Condition.B1).provide(p0_task, budget=256)
+
+
+def test_provider_rejects_a_symlinked_package_root(task: FixtureTask, tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.md").write_text("outside secret", encoding="utf-8")
+    link = tmp_path / "task-link"
+    link.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ProviderError, match="symlink"):
+        provider_for(Condition.B1).provide(
+            {"context_files": ("secret.md",)}, budget=256, package_root=link
+        )
 
 
 def test_untrusted_p0_marker_cannot_bypass_condition_filtering(task: FixtureTask) -> None:

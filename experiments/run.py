@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +28,9 @@ from experiments.preflight import PreflightError, validate_receipt
 
 class RunRefusal(RuntimeError):
     """Execution was refused before an agent could run."""
+
+
+_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,15 +80,27 @@ def _assert_executable_task(task: object) -> None:
 def _artifact_data(artifact: object | None) -> tuple[tuple[str, ...], str | None, str | None]:
     if artifact is None:
         return (), None, None
-    digest = _field(artifact, "digest", None)
     condition = _field(artifact, "condition", None)
     metadata = _field(artifact, "metadata", {})
     capsule_digests: list[str] = []
-    if isinstance(metadata, dict):
+    manifest_digest: object = None
+    if isinstance(metadata, Mapping):
         candidate = metadata.get("capsule_digests", metadata.get("capsules", ()))
         if isinstance(candidate, (list, tuple)):
             capsule_digests = [item for item in candidate if isinstance(item, str)]
-    return tuple(capsule_digests), digest if isinstance(digest, str) else None, condition if isinstance(condition, str) else None
+        manifest_digest = metadata.get(
+            "view_manifest_digest", metadata.get("manifest_digest")
+        )
+    if manifest_digest is not None and (
+        not isinstance(manifest_digest, str) or _DIGEST.fullmatch(manifest_digest) is None
+    ):
+        raise RunRefusal("view manifest digest is invalid")
+    normalized_condition = getattr(condition, "value", condition)
+    return (
+        tuple(capsule_digests),
+        manifest_digest if isinstance(manifest_digest, str) else None,
+        normalized_condition if isinstance(normalized_condition, str) else None,
+    )
 
 
 def _prompt_digest(task: object, artifact: object | None) -> str:
@@ -162,9 +179,13 @@ def _adapter_observation(result: object) -> tuple[int, bytes, str | None, UsageR
         input_tokens = _field(usage_obj, "input_tokens", None)
         output_tokens = _field(usage_obj, "output_tokens", None)
         raw_digest = _field(usage_obj, "raw_digest", None)
-        if input_tokens is not None and type(input_tokens) is not int:
+        if input_tokens is not None and (
+            type(input_tokens) is not int or input_tokens < 0
+        ):
             raise RunRefusal("adapter returned invalid usage")
-        if output_tokens is not None and type(output_tokens) is not int:
+        if output_tokens is not None and (
+            type(output_tokens) is not int or output_tokens < 0
+        ):
             raise RunRefusal("adapter returned invalid usage")
         if raw_digest is not None and not isinstance(raw_digest, str):
             raise RunRefusal("adapter returned invalid usage")
@@ -177,6 +198,52 @@ def _adapter_observation(result: object) -> tuple[int, bytes, str | None, UsageR
     if stderr_digest is not None and not isinstance(stderr_digest, str):
         stderr_digest = None
     return exit_code, stdout, stderr_digest, usage, metadata
+
+
+def _validate_adapter_identity(adapter: object, receipt: PreflightReceipt) -> None:
+    """Bind the executable object used for the run to the signed preflight."""
+
+    binary = getattr(adapter, "binary", None)
+    if receipt.binary is not None and binary != receipt.binary:
+        raise RunRefusal("adapter binary does not match preflight receipt")
+    expected_agent = getattr(adapter, "agent_name", None)
+    if expected_agent is not None and expected_agent != receipt.agent:
+        raise RunRefusal("adapter agent does not match preflight receipt")
+    preflight = getattr(adapter, "preflight", None)
+    if not callable(preflight):
+        raise RunRefusal("adapter preflight probe is required")
+    try:
+        observed = preflight()
+    except Exception as error:
+        raise RunRefusal("adapter preflight probe failed") from error
+    for field in ("agent", "version", "model"):
+        value = getattr(observed, field, None)
+        expected = getattr(receipt, field)
+        if not isinstance(value, str) or value != expected:
+            raise RunRefusal(f"adapter {field} does not match preflight receipt")
+
+
+def _validate_result_binding(metadata: Mapping[str, Any], receipt: PreflightReceipt) -> None:
+    if metadata.get("available") is not True:
+        raise RunRefusal("adapter result metadata is unavailable")
+    for field in ("agent", "version", "model"):
+        value = metadata.get(field)
+        expected = getattr(receipt, field)
+        if not isinstance(value, str) or value != expected:
+            raise RunRefusal(f"adapter result {field} does not match preflight receipt")
+
+
+def _validate_usage(usage: UsageRecord, stdout: bytes) -> None:
+    """Usage counts are accepted only when bound to persisted raw events."""
+
+    raw_digest = usage.raw_digest
+    has_counts = usage.input_tokens is not None or usage.output_tokens is not None
+    if has_counts and raw_digest is None:
+        raise RunRefusal("adapter usage counts lack a raw event digest")
+    if raw_digest is not None:
+        expected = "sha256:" + hashlib.sha256(stdout).hexdigest()
+        if raw_digest != expected:
+            raise RunRefusal("adapter usage raw digest does not match raw events")
 
 
 def run_once(
@@ -196,10 +263,17 @@ def run_once(
     task_id = _task_id(task)
     _assert_executable_task(task)
     condition = _field(artifact, "condition", _field(task, "condition", "B0"))
-    if not isinstance(condition, str) or condition not in {"B0", "B1", "B2", "B3", "B4", "CC"}:
+    condition = getattr(condition, "value", condition)
+    if not isinstance(condition, str) or condition not in parsed.conditions:
+        raise RunRefusal("declared condition is not in experiment matrix")
+    if type(repetition) is not int or repetition < 0 or repetition >= parsed.repetitions:
+        raise RunRefusal("repetition is outside experiment matrix")
+    if condition not in {"B0", "B1", "B2", "B3", "B4", "CC"}:
         raise RunRefusal("unknown condition")
     commit = _repository_commit(task)
     capsule_digests, artifact_digest, _ = _artifact_data(artifact)
+    if condition == "CC" and artifact_digest is None:
+        raise RunRefusal("CC run requires a view manifest digest")
     prompt_digest = _prompt_digest(task, artifact)
     identity_record = RunRecord.new(
         task_id=task_id,
@@ -238,6 +312,7 @@ def run_once(
         raise RunRefusal("live-agent execution is disabled")
     if adapter is None:
         raise RunRefusal("adapter is required for live execution")
+    _validate_adapter_identity(adapter, receipt)
     raw_workspace: object = workspace
     if raw_workspace is None:
         raw_workspace = _field(task, "package_root", Path.cwd())
@@ -253,6 +328,8 @@ def run_once(
     try:
         result = _adapter_call(adapter, task, artifact, run_root)
         exit_code, stdout, _stderr_digest, usage, metadata = _adapter_observation(result)
+        _validate_result_binding(metadata, receipt)
+        _validate_usage(usage, stdout)
         infrastructure_failure = False
         failure_code = None if exit_code == 0 else "AGENT_TASK_FAILED"
         outcome = "passed" if exit_code == 0 else "failed"

@@ -236,11 +236,15 @@ def score_task(
         raise ScoreError("task is not human-approved and executable")
     root = _task_root(task, cwd or task_root or workspace)
     declared = _declared_checks(task)
+    if any(not declared[category] for category in ("target", "invariant", "spillover")):
+        raise ScoreError("approved benchmark tasks require target, invariant, and spillover checks")
     if command is not None:
         requested = _command(command)
         if not any(declared.values()) or not _declared_command_matches(requested, declared):
             raise ScoreError("scoring command is not declared by the task")
-        declared = {"target": (requested,), "invariant": (), "spillover": ()}
+        # An explicit command is only an assertion that the caller selected a
+        # declared check. Keep the complete declared matrix in the run so a
+        # target-only invocation cannot erase invariant or spillover evidence.
     if not any(declared.values()):
         raise ScoreError("task declares no executable checks")
     raw_default_timeout: object = timeout_seconds

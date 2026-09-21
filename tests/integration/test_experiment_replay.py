@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -17,6 +18,7 @@ def _task(tmp_path: Path) -> dict[str, object]:
     tests.mkdir()
     (tests / "target.py").write_text("print('target')\n", encoding="utf-8")
     (tests / "invariant.py").write_text("print('invariant')\n", encoding="utf-8")
+    (tests / "spillover.py").write_text("print('spillover')\n", encoding="utf-8")
     return {
         "task_id": "task-001",
         "repository_commit": "a" * 40,
@@ -27,6 +29,7 @@ def _task(tmp_path: Path) -> dict[str, object]:
         "tests": {
             "target": [[sys.executable, "tests/target.py"]],
             "invariant": [[sys.executable, "tests/invariant.py"]],
+            "spillover": [[sys.executable, "tests/spillover.py"]],
         },
         "root": str(tmp_path),
     }
@@ -130,6 +133,23 @@ def test_task_failures_cannot_be_marked_as_retryable_infrastructure(tmp_path: Pa
         )
 
 
+def test_infrastructure_failure_cannot_claim_a_successful_exit() -> None:
+    with pytest.raises(ValueError, match="exit code"):
+        RunRecord.new(
+            task_id="task-001",
+            condition="B0",
+            agent="codex",
+            repetition=0,
+            repository_commit="a" * 40,
+            capsule_digests=[],
+            prompt_digest="sha256:" + "2" * 64,
+            raw_event_path="raw/task-001.jsonl",
+            exit_code=0,
+            infrastructure_failure=True,
+            failure_code="TIMEOUT",
+        )
+
+
 def test_dry_run_refuses_without_preflight_receipt(tmp_path: Path) -> None:
     task = _task(tmp_path)
     config = _config(tmp_path)
@@ -156,6 +176,8 @@ def test_available_preflight_requires_authenticated_receipt_and_frozen_binding(
     tmp_path: Path,
 ) -> None:
     class FakeAdapter:
+        binary = sys.executable
+
         def preflight(self) -> object:
             return type(
                 "Observed",
@@ -176,6 +198,7 @@ def test_available_preflight_requires_authenticated_receipt_and_frozen_binding(
         agent="codex",
         model="codex-test",
         version="1.2.3",
+        binary=sys.executable,
         output_path=tmp_path / "runs.jsonl",
     )
     receipt = preflight_config(
@@ -189,6 +212,105 @@ def test_available_preflight_requires_authenticated_receipt_and_frozen_binding(
     forged = receipt.model_copy(update={"model": "other", "digest": receipt.computed_digest()})
     with pytest.raises(PreflightError):
         validate_receipt(forged, config, signing_key=key)
+
+
+def test_live_run_rejects_adapter_metadata_drift_after_preflight(tmp_path: Path) -> None:
+    class DriftAdapter:
+        binary = sys.executable
+        agent_name = "codex"
+
+        def preflight(self) -> object:
+            return SimpleNamespace(
+                agent="codex",
+                version="1.2.3",
+                model="codex-test",
+                capabilities=(),
+            )
+
+        def run_task(self, **_: object) -> object:
+            return SimpleNamespace(
+                exit_code=0,
+                stdout=b"raw-event",
+                metadata=SimpleNamespace(
+                    agent="codex", version="9.9.9", model="codex-test"
+                ),
+            )
+
+    key = b"r" * 32
+    receipt_path = tmp_path / "receipt.json"
+    config = ExperimentConfig(
+        study_id="drift",
+        agent="codex",
+        model="codex-test",
+        version="1.2.3",
+        binary=sys.executable,
+        output_path=tmp_path / "runs.jsonl",
+        live_agent=True,
+        dry_run=False,
+        preflight_receipt=receipt_path,
+    )
+    preflight_config(config, adapter=DriftAdapter(), signing_key=key)
+    with pytest.raises(RunRefusal, match="result version"):
+        run_once(
+            _task(tmp_path),
+            config=config,
+            adapter=DriftAdapter(),
+            workspace=tmp_path,
+            dry_run=False,
+            preflight_key=key,
+        )
+
+
+def test_live_run_rejects_usage_counts_not_bound_to_raw_events(tmp_path: Path) -> None:
+    class ForgedUsageAdapter:
+        binary = sys.executable
+        agent_name = "codex"
+
+        def preflight(self) -> object:
+            return SimpleNamespace(
+                agent="codex",
+                version="1.2.3",
+                model="codex-test",
+                capabilities=(),
+            )
+
+        def run_task(self, **_: object) -> object:
+            return SimpleNamespace(
+                exit_code=0,
+                stdout=b"raw-event",
+                metadata=SimpleNamespace(
+                    agent="codex", version="1.2.3", model="codex-test"
+                ),
+                usage=SimpleNamespace(
+                    input_tokens=1,
+                    output_tokens=1,
+                    raw_digest="sha256:" + "0" * 64,
+                ),
+            )
+
+    key = b"u" * 32
+    receipt_path = tmp_path / "receipt.json"
+    config = ExperimentConfig(
+        study_id="usage",
+        agent="codex",
+        model="codex-test",
+        version="1.2.3",
+        binary=sys.executable,
+        output_path=tmp_path / "runs.jsonl",
+        live_agent=True,
+        dry_run=False,
+        preflight_receipt=receipt_path,
+    )
+    preflight_config(config, adapter=ForgedUsageAdapter(), signing_key=key)
+    with pytest.raises(RunRefusal, match="raw digest"):
+        run_once(
+            _task(tmp_path),
+            config=config,
+            adapter=ForgedUsageAdapter(),
+            workspace=tmp_path,
+            dry_run=False,
+            preflight_key=key,
+        )
 
 
 def test_screening_yaml_loads_arrays_without_freezing_agent_metadata() -> None:
@@ -209,6 +331,39 @@ def test_config_accepts_json_style_condition_arrays() -> None:
         dry_run=True,
     )
     assert config.conditions == ("B0", "CC")
+
+
+def test_run_plan_is_bound_to_declared_condition_matrix(tmp_path: Path) -> None:
+    task = _task(tmp_path)
+    config = ExperimentConfig(
+        study_id="matrix",
+        agent="codex",
+        conditions=("B0",),
+        repetitions=1,
+        output_path=tmp_path / "matrix.jsonl",
+    )
+    with pytest.raises(RunRefusal, match="declared condition"):
+        run_once(
+            task,
+            config=config,
+            artifact={"condition": "CC"},
+            dry_run=True,
+        )
+    with pytest.raises(RunRefusal, match="repetition"):
+        run_once(task, config=config, repetition=1, dry_run=True)
+
+
+def test_scorer_rejects_approved_tasks_without_all_three_check_classes(
+    tmp_path: Path,
+) -> None:
+    task = _task(tmp_path)
+    task["tests"] = {
+        "target": task["tests"]["target"],
+        "invariant": [],
+        "spillover": [],
+    }
+    with pytest.raises(ScoreError, match="target, invariant, and spillover"):
+        score_task(task, cwd=tmp_path)
 
 
 def test_scorer_uses_declared_relative_tests_and_ignores_condition_labels(
@@ -247,7 +402,11 @@ def test_scorer_rejects_declared_symlink_paths(tmp_path: Path) -> None:
     outside.write_text("print('outside')\n", encoding="utf-8")
     link = tmp_path / "tests" / "link.py"
     link.symlink_to(outside)
-    task["tests"] = {"target": [[sys.executable, "tests/link.py"]]}
+    task["tests"] = {
+        "target": [[sys.executable, "tests/link.py"]],
+        "invariant": task["tests"]["invariant"],
+        "spillover": task["tests"]["spillover"],
+    }
     with pytest.raises(ScoreError, match="symlink"):
         score_task(task, cwd=tmp_path)
 
