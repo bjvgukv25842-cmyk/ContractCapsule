@@ -25,6 +25,7 @@ from .providers import (
     ProviderError,
     RAGProvider,
     SummaryProvider,
+    is_provider_artifact,
     provider_for,
 )
 
@@ -49,6 +50,7 @@ __all__ = [
     "budget_digest",
     "count_tokens",
     "enforce_budget",
+    "is_provider_artifact",
     "normalize_budget",
     "payload_bytes",
     "provider_for",

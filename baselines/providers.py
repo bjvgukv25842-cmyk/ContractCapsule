@@ -39,6 +39,13 @@ class ProviderError(ValueError):
     """A task package cannot be converted into a trusted context artifact."""
 
 
+# Process-local capability set only by ``ContextProvider.provide``.  A caller
+# can construct a structurally valid ``ContextArtifact`` for display, but it
+# cannot pass one to the experiment runner as provider output without this
+# attestation.
+_PROVIDER_ATTESTATION = object()
+
+
 class Condition(StrEnum):
     """The six preregistered primary study conditions."""
 
@@ -124,6 +131,9 @@ class ContextArtifact:
     budget: Budget
     byte_count: int
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    _provider_attestation: object | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         try:
@@ -207,6 +217,20 @@ class ContextArtifact:
         }
 
 
+def _attest_artifact(artifact: ContextArtifact) -> ContextArtifact:
+    object.__setattr__(artifact, "_provider_attestation", _PROVIDER_ATTESTATION)
+    return artifact
+
+
+def is_provider_artifact(value: object) -> bool:
+    """Return whether ``value`` is an artifact emitted by a context provider."""
+
+    return (
+        type(value) is ContextArtifact
+        and getattr(value, "_provider_attestation", None) is _PROVIDER_ATTESTATION
+    )
+
+
 class ContextProvider(ABC):
     """Common interface implemented by every primary condition."""
 
@@ -283,14 +307,16 @@ class ContextProvider(ABC):
             and source_paths[0].startswith("compiled-view:")
         ):
             metadata["view_manifest_digest"] = source_paths[0].split(":", 1)[1]
-        return ContextArtifact(
-            condition=self.condition,
-            content=payload,
-            digest=digest,
-            token_count=token_count,
-            budget=normalized,
-            byte_count=byte_count,
-            metadata=metadata,
+        return _attest_artifact(
+            ContextArtifact(
+                condition=self.condition,
+                content=payload,
+                digest=digest,
+                token_count=token_count,
+                budget=normalized,
+                byte_count=byte_count,
+                metadata=metadata,
+            )
         )
 
     # These aliases make the boundary convenient for the experiment harness
@@ -832,5 +858,6 @@ __all__ = [
     "ProviderError",
     "RAGProvider",
     "SummaryProvider",
+    "is_provider_artifact",
     "provider_for",
 ]

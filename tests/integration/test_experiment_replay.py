@@ -7,6 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from baselines import Budget, provider_for
+from benchmark.loader import load_task
 from benchmark.schema import TaskSpec
 from experiments.models import ExperimentConfig, RunRecord, RunStore
 from experiments.preflight import PreflightError, preflight_config
@@ -14,49 +16,70 @@ from experiments.run import RunRefusal, run_once
 from experiments.score import ScoreError, score_task
 
 
-def _task(tmp_path: Path) -> TaskSpec:
-    tests = tmp_path / "tests"
-    tests.mkdir()
-    (tests / "target.py").write_text("print('target')\n", encoding="utf-8")
-    (tests / "invariant.py").write_text("print('invariant')\n", encoding="utf-8")
-    (tests / "spillover.py").write_text("print('spillover')\n", encoding="utf-8")
-    return TaskSpec.model_validate(
-        {
-            "task_id": "task-001",
-            "category": "policy",
-            "language": "python",
-            "repository": {
-                "source_url": "https://github.com/example/project",
-                "commit": "a" * 40,
-                "license": "MIT",
-                "source_status": "verified",
-                "content_digest": "sha256:" + "1" * 64,
-            },
-            "human_approval": "approved",
-            "executable": True,
-            "max_runtime_seconds": 5,
-            "checks": {
-                "target": (
-                    {
-                        "check_id": "target",
-                        "command": ("python3", "tests/target.py"),
-                    },
-                ),
-                "invariant": (
-                    {
-                        "check_id": "invariant",
-                        "command": ("python3", "tests/invariant.py"),
-                    },
-                ),
-                "spillover": (
-                    {
-                        "check_id": "spillover",
-                        "command": ("python3", "tests/spillover.py"),
-                    },
-                ),
-            },
-        }
+def _write_task_package(
+    tmp_path: Path,
+    *,
+    approval: str = "approved",
+    executable: bool = True,
+    target_command: str = "tests/target.py",
+) -> TaskSpec:
+    for relative in (
+        "capsules/old",
+        "capsules/new",
+        "gold",
+        "tests/target",
+        "tests/invariant",
+        "tests/spillover",
+        "licenses",
+    ):
+        (tmp_path / relative).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "prompt.md").write_text("exercise\n", encoding="utf-8")
+    (tmp_path / "capsules/old/context.md").write_text("old\n", encoding="utf-8")
+    (tmp_path / "capsules/new/context.md").write_text("new\n", encoding="utf-8")
+    (tmp_path / "tests/target/fixture.txt").write_text("target\n", encoding="utf-8")
+    (tmp_path / "tests/invariant/fixture.txt").write_text("invariant\n", encoding="utf-8")
+    (tmp_path / "tests/spillover/fixture.txt").write_text("spillover\n", encoding="utf-8")
+    (tmp_path / "tests/target.py").write_text("print('target')\n", encoding="utf-8")
+    (tmp_path / "tests/invariant.py").write_text("print('invariant')\n", encoding="utf-8")
+    (tmp_path / "tests/spillover.py").write_text("print('spillover')\n", encoding="utf-8")
+    (tmp_path / "gold/required-atoms.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "gold/target-effects.yaml").write_text("target: true\n", encoding="utf-8")
+    (tmp_path / "gold/protected-invariants.yaml").write_text("invariant: true\n", encoding="utf-8")
+    (tmp_path / "gold/forbidden-spillover.yaml").write_text("spillover: false\n", encoding="utf-8")
+    (tmp_path / "licenses/provenance.json").write_text("{}\n", encoding="utf-8")
+    digest = "sha256:" + "1" * 64
+    task_yaml = f"""task_id: task-001
+category: policy
+language: python
+repository:
+  source_url: https://github.com/example/project
+  commit: {'a' * 40}
+  license: MIT
+  source_status: verified
+  content_digest: {digest}
+human_approval: {approval}
+executable: {'true' if executable else 'false'}
+max_runtime_seconds: 5
+checks:
+  target:
+    - check_id: target
+      command: [python3, {target_command}]
+  invariant:
+    - check_id: invariant
+      command: [python3, tests/invariant.py]
+  spillover:
+    - check_id: spillover
+      command: [python3, tests/spillover.py]
+"""
+    (tmp_path / "task.yaml").write_text(task_yaml, encoding="utf-8")
+    (tmp_path / "repository.lock").write_text(
+        json.dumps({"content_digest": digest}) + "\n", encoding="utf-8"
     )
+    return load_task(tmp_path)
+
+
+def _task(tmp_path: Path) -> TaskSpec:
+    return _write_task_package(tmp_path)
 
 
 def _config(tmp_path: Path) -> ExperimentConfig:
@@ -362,19 +385,21 @@ def test_run_plan_is_bound_to_declared_condition_matrix(tmp_path: Path) -> None:
     config = ExperimentConfig(
         study_id="matrix",
         agent="codex",
-        conditions=("B0",),
+        conditions=("CC",),
         repetitions=1,
         output_path=tmp_path / "matrix.jsonl",
     )
+    artifact = provider_for("B0").provide(task, Budget(128))
     with pytest.raises(RunRefusal, match="declared condition"):
         run_once(
             task,
             config=config,
-            artifact={"condition": "CC"},
+            artifact=artifact,
             dry_run=True,
         )
+    repetition_config = config.model_copy(update={"conditions": ("B0",)})
     with pytest.raises(RunRefusal, match="repetition"):
-        run_once(task, config=config, repetition=1, dry_run=True)
+        run_once(task, config=repetition_config, repetition=1, dry_run=True)
 
 
 def test_run_refuses_unvalidated_mapping_even_when_fields_look_approved(
@@ -389,6 +414,37 @@ def test_run_refuses_unvalidated_mapping_even_when_fields_look_approved(
     }
     with pytest.raises(RunRefusal, match="loader-owned"):
         run_once(forged, config=_config(tmp_path), dry_run=True)
+
+
+def test_run_and_score_refuse_publicly_constructed_task_models(tmp_path: Path) -> None:
+    loaded = _task(tmp_path)
+    forged = TaskSpec.model_validate(loaded.model_dump(mode="python"))
+    with pytest.raises(RunRefusal, match="loader-owned"):
+        run_once(forged, config=_config(tmp_path), dry_run=True)
+    with pytest.raises(ScoreError, match="loader-owned"):
+        score_task(forged, cwd=tmp_path)
+
+
+def test_loaded_task_is_revalidated_before_execution(tmp_path: Path) -> None:
+    task = _task(tmp_path)
+    task_yaml = (tmp_path / "task.yaml").read_text(encoding="utf-8")
+    (tmp_path / "task.yaml").write_text(
+        task_yaml.replace("executable: true", "executable: false"),
+        encoding="utf-8",
+    )
+    with pytest.raises(RunRefusal, match="changed"):
+        run_once(task, config=_config(tmp_path), dry_run=True)
+
+
+def test_run_rejects_unattested_artifact_mappings(tmp_path: Path) -> None:
+    task = _task(tmp_path)
+    with pytest.raises(RunRefusal, match="artifact"):
+        run_once(
+            task,
+            config=_config(tmp_path),
+            artifact={"condition": "B0"},
+            dry_run=True,
+        )
 
 
 def test_scorer_rejects_approved_tasks_without_all_three_check_classes(
@@ -441,24 +497,18 @@ def test_scorer_refuses_unvalidated_mapping_with_forged_checks(tmp_path: Path) -
 
 
 def test_scorer_rejects_unapproved_tasks(tmp_path: Path) -> None:
-    task = _task(tmp_path).model_copy(
-        update={"human_approval": "pending", "executable": False}
-    )
+    task = _write_task_package(tmp_path, approval="pending", executable=False)
     with pytest.raises(ScoreError, match="approved"):
         score_task(task, cwd=tmp_path)
 
 
 def test_scorer_rejects_declared_symlink_paths(tmp_path: Path) -> None:
-    task = _task(tmp_path)
     outside = tmp_path.parent / "outside-test.py"
     outside.write_text("print('outside')\n", encoding="utf-8")
     link = tmp_path / "tests" / "link.py"
+    _write_task_package(tmp_path, target_command="tests/link.py")
     link.symlink_to(outside)
-    raw = task.model_dump(mode="python")
-    raw["checks"]["target"] = (
-        {"check_id": "target", "command": ("python3", "tests/link.py")},
-    )
-    task = TaskSpec.model_validate(raw)
+    task = load_task(tmp_path)
     with pytest.raises(ScoreError, match="symlink"):
         score_task(task, cwd=tmp_path)
 

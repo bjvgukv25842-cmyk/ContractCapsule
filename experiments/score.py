@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from benchmark.schema import TaskSpec
+from benchmark.loader import BenchmarkLoadError, require_loaded_task
 
 
 class ScoreError(ValueError):
@@ -229,8 +229,10 @@ def score_task(
     """
 
     del condition, labels
-    if type(task) is not TaskSpec:
-        raise ScoreError("scoring requires a loader-owned TaskSpec")
+    try:
+        task = require_loaded_task(task)
+    except BenchmarkLoadError as error:
+        raise ScoreError(str(error)) from error
     approval = _check_attr(task, "human_approval", _check_attr(task, "approval_status", None))
     approval_value = getattr(approval, "value", approval)
     repository = _check_attr(task, "repository", None)

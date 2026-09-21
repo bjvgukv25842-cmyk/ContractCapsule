@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
+from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 
 from contractcapsule.models.base import (
     Digest,
@@ -101,6 +102,11 @@ class GoldChecks(StrictFrozenModel):
 
 
 class TaskSpec(StrictFrozenModel):
+    # Loader provenance is deliberately private: it is not part of the task
+    # identity, but execution/scoring must reject caller-forged schema models.
+    _loader_attestation: object | None = PrivateAttr(default=None)
+    _loader_root: Path | None = PrivateAttr(default=None)
+
     task_id: TaskId
     category: Category
     language: NonEmptyString

@@ -13,6 +13,10 @@ from yaml.constructor import ConstructorError
 
 from benchmark.schema import BenchmarkManifest, TaskSpec
 
+# Process-local capability.  A public ``TaskSpec.model_validate`` call cannot
+# manufacture this token; callers must come through ``load_task``.
+_LOADER_ATTESTATION = object()
+
 
 class BenchmarkLoadError(ValueError):
     """A task or manifest cannot be trusted for benchmark use."""
@@ -193,7 +197,29 @@ def load_task(task_dir: Path) -> TaskSpec:
         raise BenchmarkLoadError("approved task repository.lock is missing")
     if task.human_approval.value == "approved":
         _require_complete_package(root)
+    object.__setattr__(task, "_loader_attestation", _LOADER_ATTESTATION)
+    object.__setattr__(task, "_loader_root", root.resolve())
     return task
+
+
+def require_loaded_task(task: object) -> TaskSpec:
+    """Require a loader-attested task and revalidate its package on use.
+
+    Re-reading the package closes the gap where a caller keeps a previously
+    loaded model after changing ``task.yaml`` or the package layout.
+    """
+
+    if type(task) is not TaskSpec:
+        raise BenchmarkLoadError("execution requires a loader-owned TaskSpec")
+    if getattr(task, "_loader_attestation", None) is not _LOADER_ATTESTATION:
+        raise BenchmarkLoadError("execution requires a loader-owned TaskSpec")
+    root = getattr(task, "_loader_root", None)
+    if not isinstance(root, Path):
+        raise BenchmarkLoadError("loader task package root is unavailable")
+    current = load_task(root)
+    if current.model_dump(mode="python") != task.model_dump(mode="python"):
+        raise BenchmarkLoadError("task package changed after loading")
+    return current
 
 
 def load_manifest(path: Path) -> BenchmarkManifest:
@@ -218,13 +244,15 @@ def load_manifest(path: Path) -> BenchmarkManifest:
     tasks_root = manifest_path.parent / "tasks"
     if tasks_root.is_symlink() or not tasks_root.is_dir():
         raise BenchmarkLoadError("manifest task package root is missing")
+    loaded_tasks: list[TaskSpec] = []
     for declared in manifest.tasks:
         package = tasks_root / declared.task_id
         if not package.exists():
             raise BenchmarkLoadError("manifest task package is missing")
         loaded = load_task(package)
-        if loaded != declared:
+        if loaded.model_dump(mode="python") != declared.model_dump(mode="python"):
             raise BenchmarkLoadError("manifest task package differs from manifest")
+        loaded_tasks.append(loaded)
     if manifest.manifest_digest is not None:
         payload = dict(raw)
         payload.pop("manifest_digest", None)
@@ -232,4 +260,9 @@ def load_manifest(path: Path) -> BenchmarkManifest:
         expected = "sha256:" + hashlib.sha256(encoded).hexdigest()
         if manifest.manifest_digest != expected:
             raise BenchmarkLoadError("benchmark manifest digest mismatch")
-    return manifest
+    # Preserve loader provenance for consumers while keeping the manifest's
+    # public identity identical to the signed JSON payload.
+    return manifest.model_copy(update={"tasks": tuple(loaded_tasks)})
+
+
+__all__ = ["BenchmarkLoadError", "load_manifest", "load_task", "require_loaded_task"]

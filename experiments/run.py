@@ -15,7 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from benchmark.schema import TaskSpec
+from baselines.providers import ContextArtifact, is_provider_artifact
+from benchmark.loader import BenchmarkLoadError, require_loaded_task
 from experiments.models import (
     ExperimentConfig,
     PreflightReceipt,
@@ -261,8 +262,14 @@ def run_once(
     preflight_key: bytes | None = None,
 ) -> RunRecord | RunPlan:
     parsed = load_config(config)
-    if type(task) is not TaskSpec:
-        raise RunRefusal("execution requires a loader-owned TaskSpec")
+    try:
+        task = require_loaded_task(task)
+    except BenchmarkLoadError as error:
+        raise RunRefusal(str(error)) from error
+    if artifact is not None and not is_provider_artifact(artifact):
+        raise RunRefusal("artifact must be produced by a context provider")
+    if artifact is not None and type(artifact) is not ContextArtifact:
+        raise RunRefusal("artifact must be a ContextArtifact")
     task_id = _task_id(task)
     _assert_executable_task(task)
     condition = _field(artifact, "condition", _field(task, "condition", "B0"))
