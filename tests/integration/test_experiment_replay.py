@@ -7,32 +7,56 @@ from types import SimpleNamespace
 
 import pytest
 
+from benchmark.schema import TaskSpec
 from experiments.models import ExperimentConfig, RunRecord, RunStore
 from experiments.preflight import PreflightError, preflight_config
 from experiments.run import RunRefusal, run_once
 from experiments.score import ScoreError, score_task
 
 
-def _task(tmp_path: Path) -> dict[str, object]:
+def _task(tmp_path: Path) -> TaskSpec:
     tests = tmp_path / "tests"
     tests.mkdir()
     (tests / "target.py").write_text("print('target')\n", encoding="utf-8")
     (tests / "invariant.py").write_text("print('invariant')\n", encoding="utf-8")
     (tests / "spillover.py").write_text("print('spillover')\n", encoding="utf-8")
-    return {
-        "task_id": "task-001",
-        "repository_commit": "a" * 40,
-        "human_approval": "approved",
-        "executable": True,
-        "repository": {"source_status": "verified"},
-        "max_runtime_seconds": 5,
-        "tests": {
-            "target": [[sys.executable, "tests/target.py"]],
-            "invariant": [[sys.executable, "tests/invariant.py"]],
-            "spillover": [[sys.executable, "tests/spillover.py"]],
-        },
-        "root": str(tmp_path),
-    }
+    return TaskSpec.model_validate(
+        {
+            "task_id": "task-001",
+            "category": "policy",
+            "language": "python",
+            "repository": {
+                "source_url": "https://github.com/example/project",
+                "commit": "a" * 40,
+                "license": "MIT",
+                "source_status": "verified",
+                "content_digest": "sha256:" + "1" * 64,
+            },
+            "human_approval": "approved",
+            "executable": True,
+            "max_runtime_seconds": 5,
+            "checks": {
+                "target": (
+                    {
+                        "check_id": "target",
+                        "command": ("python3", "tests/target.py"),
+                    },
+                ),
+                "invariant": (
+                    {
+                        "check_id": "invariant",
+                        "command": ("python3", "tests/invariant.py"),
+                    },
+                ),
+                "spillover": (
+                    {
+                        "check_id": "spillover",
+                        "command": ("python3", "tests/spillover.py"),
+                    },
+                ),
+            },
+        }
+    )
 
 
 def _config(tmp_path: Path) -> ExperimentConfig:
@@ -353,17 +377,29 @@ def test_run_plan_is_bound_to_declared_condition_matrix(tmp_path: Path) -> None:
         run_once(task, config=config, repetition=1, dry_run=True)
 
 
+def test_run_refuses_unvalidated_mapping_even_when_fields_look_approved(
+    tmp_path: Path,
+) -> None:
+    forged = {
+        "task_id": "task-001",
+        "repository_commit": "a" * 40,
+        "human_approval": "approved",
+        "executable": True,
+        "repository": {"source_status": "verified"},
+    }
+    with pytest.raises(RunRefusal, match="loader-owned"):
+        run_once(forged, config=_config(tmp_path), dry_run=True)
+
+
 def test_scorer_rejects_approved_tasks_without_all_three_check_classes(
     tmp_path: Path,
 ) -> None:
     task = _task(tmp_path)
-    task["tests"] = {
-        "target": task["tests"]["target"],
-        "invariant": [],
-        "spillover": [],
-    }
-    with pytest.raises(ScoreError, match="target, invariant, and spillover"):
-        score_task(task, cwd=tmp_path)
+    raw = task.model_dump(mode="python")
+    raw["checks"]["invariant"] = ()
+    raw["checks"]["spillover"] = ()
+    with pytest.raises(ValueError, match="target, invariant, and spillover"):
+        TaskSpec.model_validate(raw)
 
 
 def test_scorer_uses_declared_relative_tests_and_ignores_condition_labels(
@@ -377,7 +413,7 @@ def test_scorer_uses_declared_relative_tests_and_ignores_condition_labels(
     result = score_task(
         task,
         condition="B0",
-        command=[sys.executable, "tests/target.py"],
+        command=["python3", "tests/target.py"],
         cwd=tmp_path,
         timeout_seconds=2,
         labels={"target": True, "invariant": False},
@@ -385,13 +421,29 @@ def test_scorer_uses_declared_relative_tests_and_ignores_condition_labels(
     assert result.target_passed is True
     assert result.condition is None
     with pytest.raises(ScoreError):
-        score_task(task, command=[sys.executable, "../escape.py"], cwd=tmp_path)
+        score_task(task, command=["python3", "../escape.py"], cwd=tmp_path)
+
+
+def test_scorer_refuses_unvalidated_mapping_with_forged_checks(tmp_path: Path) -> None:
+    forged = {
+        "task_id": "task-001",
+        "human_approval": "approved",
+        "executable": True,
+        "repository": {"source_status": "verified"},
+        "tests": {
+            "target": [["/usr/bin/true"]],
+            "invariant": [["/usr/bin/true"]],
+            "spillover": [["/usr/bin/true"]],
+        },
+    }
+    with pytest.raises(ScoreError, match="loader-owned"):
+        score_task(forged, cwd=tmp_path)
 
 
 def test_scorer_rejects_unapproved_tasks(tmp_path: Path) -> None:
-    task = _task(tmp_path)
-    task["human_approval"] = "pending"
-    task["executable"] = False
+    task = _task(tmp_path).model_copy(
+        update={"human_approval": "pending", "executable": False}
+    )
     with pytest.raises(ScoreError, match="approved"):
         score_task(task, cwd=tmp_path)
 
@@ -402,11 +454,11 @@ def test_scorer_rejects_declared_symlink_paths(tmp_path: Path) -> None:
     outside.write_text("print('outside')\n", encoding="utf-8")
     link = tmp_path / "tests" / "link.py"
     link.symlink_to(outside)
-    task["tests"] = {
-        "target": [[sys.executable, "tests/link.py"]],
-        "invariant": task["tests"]["invariant"],
-        "spillover": task["tests"]["spillover"],
-    }
+    raw = task.model_dump(mode="python")
+    raw["checks"]["target"] = (
+        {"check_id": "target", "command": ("python3", "tests/link.py")},
+    )
+    task = TaskSpec.model_validate(raw)
     with pytest.raises(ScoreError, match="symlink"):
         score_task(task, cwd=tmp_path)
 
@@ -416,7 +468,7 @@ def test_explicit_scorer_command_must_match_declared_argv_exactly(tmp_path: Path
     with pytest.raises(ScoreError, match="declared"):
         score_task(
             task,
-            command=[sys.executable, "tests/target.py", "--extra"],
+            command=["python3", "tests/target.py", "--extra"],
             cwd=tmp_path,
         )
 

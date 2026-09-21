@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from benchmark.schema import TaskSpec
 from experiments.models import (
     ExperimentConfig,
     PreflightReceipt,
@@ -260,6 +261,8 @@ def run_once(
     preflight_key: bytes | None = None,
 ) -> RunRecord | RunPlan:
     parsed = load_config(config)
+    if type(task) is not TaskSpec:
+        raise RunRefusal("execution requires a loader-owned TaskSpec")
     task_id = _task_id(task)
     _assert_executable_task(task)
     condition = _field(artifact, "condition", _field(task, "condition", "B0"))
