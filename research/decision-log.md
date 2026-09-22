@@ -1542,3 +1542,59 @@
   no real Codex/Claude run or `experiments/configs/agents.yaml` record exists. No TER/PIP/BSR, cross-agent result,
   or M7 implementation is claimed. The author M6 exit decision remains a
   separate gate.
+
+## M7-001 - CapsuleBench Engineering Substrate (2026-09-20)
+
+- Status: engineering checkpoint complete; human M7 exit gate open. The
+  implementation is on `codex/m7-capsulebench` through `39aa9c7`, from the
+  M6 baseline `9b90204`.
+- Delivered: strict benchmark schema/loader, 24 unique screening candidates,
+  six budget-parity condition providers, fail-closed P0 handling, validated
+  compiled-view binding for CC, preflight receipts with authenticated live
+  metadata, dry-run/live gating, append-only replayable run records with
+  serialized writes, infrastructure-only retry links, and condition-blind
+  declared-check scoring.
+- Verification: the three M7 focused suites pass30; the M6 adapter/MCP/vertical
+  smoke suites pass13; the cumulative repository regression passes1103;
+  focused Ruff and Mypy checks pass. Frozen CCS-2.1 and execution-plan hashes
+  remain exact.
+- The first independent M7 review returned BLOCK on the pre-repair candidate.
+  Its Critical/Important findings and the corresponding regression fixes are
+  preserved in the M7 report. A fresh exact-commit re-audit is required before
+  human exit acceptance.
+- Boundary: all 24 candidates remain `human_approval: pending`,
+  `executable: false`, with unverified licenses and no immutable source
+  commits or executable gold truth. No benchmark approval, pilot, run,
+  model/version freeze, TER/PIP/BSR result, or empirical RQ claim is made.
+- A delegated benchmark worker encountered provider HTTP429. It produced no
+  accepted result and did not replace or alter any experiment result; the
+  event is retained in the AI-use ledger.
+- Required author decisions: approve/exclude and source-lock candidates,
+  validate gold truth and 25% independent review, freeze agent metadata, and
+  authorize G2 before M8. **M8 has not started; no next module was started.**
+
+## M7-002 - Final engineering verification and boundary correction (2026-09-22)
+
+- The final M7 implementation candidate is `dd04cea`, covering the range from
+  M6 baseline `9b90204`. This correction preserves M7-001 as historical
+  evidence and records the follow-up trust-boundary repairs rather than
+  rewriting the earlier review history.
+- The repaired boundary now requires loader-attested tasks, a digest over every
+  immutable package file, exact task/package/repository/budget bindings on
+  provider artifacts, a separate clean Git workspace for live execution
+  (origin, immutable commit, and clean tracked/untracked/ignored status), and
+  an isolated scorer copy so runtime artifacts cannot mutate the authoritative
+  package.
+- Verification at the final candidate: M7 focused suites `53 passed`; M6
+  adapter/MCP/vertical smoke `13 passed`; full `uv run pytest -q` `1126 passed
+  in 304.33s`; focused Ruff and Mypy passed; `git diff --check` passed; the
+  CCS-2.1 and frozen execution-plan SHA-256 values remain exact.
+- The manifest still contains 24 screening candidates, all
+  `human_approval: pending`, `executable: false`, and `unverified`. No human
+  gold truth, pilot/full run, model/version freeze, TER/PIP/BSR, or empirical
+  RQ result is claimed. M8 has not started.
+- The initial independent review BLOCK and all subsequent repair probes remain
+  recorded. Final independent-review dispatches were interrupted by provider
+  HTTP 429; no PASS was inferred and no experiment result was replaced. Human
+  authors still must make the M7 exit decision, complete candidate adjudication
+  and second-review coverage, freeze agent metadata, and authorize G2.

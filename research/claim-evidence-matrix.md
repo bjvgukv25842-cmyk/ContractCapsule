@@ -1,5 +1,12 @@
 # Claim-Evidence Matrix
 
+Latest 2026-09-22 M7 engineering status: the CapsuleBench substrate is
+implemented at `dd04cea`; the final external re-audit dispatches were
+interrupted by provider HTTP 429 and no independent PASS is claimed. The 24
+manifest records are screening candidates only (`human_approval: pending`,
+unverified source locks, non-executable); no C3 approval, C4 pilot, or empirical
+RQ result is claimed.
+
 Latest 2026-09-13: the M5 worktree has recovered. M5-1/2/3 remain independently
 reviewed; Docker malformed-response repair has scoped independent PASS at
 `d5ad681` (full979 implementation tests; independent9 focused). M5-4B
@@ -252,3 +259,36 @@ M6 G1 is explicitly open: installed CLI version strings are not an approved
 model/version freeze, and no real-agent run or `experiments/configs/agents.yaml`
 record is available. No formal experiment,
 TER/PIP/BSR result, or M7 implementation is claimed.
+
+## M7 Engineering Evidence Pointer (2026-09-20 historical checkpoint)
+
+The implementation and verification record are in
+`research/module-reports/M7-2026-09-20-implementation.md`; the exact candidate
+is `39aa9c7` on `codex/m7-capsulebench`. The first independent review of the
+pre-repair candidate returned BLOCK; its trust-boundary findings were fixed and
+covered by the 30 focused tests and 1103-test cumulative regression. A fresh
+exact-commit re-audit remains a technical prerequisite to the human M7 exit
+decision.
+
+| Claim/question | New engineering support | Still missing |
+|---|---|---|
+| C3 benchmark | Strict duplicate-key/path/symlink/digest loader; 24 unique screened candidates; frozen-state approval gate; condition-blind declared-check scorer | 24 human-approved repositories, immutable commits and licenses, paired capsules, gold atoms/spans, executable objective checks, adjudication ledger, and 25% second review |
+| C4 comparison | B0/B1/B2/B3/B4/CC providers; locked neutral tokenizer; P0 fail-closed handling; validated CC compiled-view binding; signed preflight metadata; append-only run/retry records | G2 pilot, model/version freeze, agent runs, cost/behavior observations, TER/PIP/BSR, and all RQ statistics |
+| C5 reproducibility | JSONL replay, cross-process run-store locking, manifest digest, focused negative tests, module report, decision entry, and AI-use record | Human gate, clean external replication, anonymous artifact, and submission audit |
+| RQ1--RQ4 | No empirical observation added; only engineering checks are available | All agent-task measurements and analysis |
+
+### M7 Final Engineering Correction (2026-09-22)
+
+The final implementation candidate is `dd04cea` (M6 baseline `9b90204` through
+`dd04cea`). Follow-up regressions now cover loader provenance, full package-file
+attestation, exact provider task/package/budget binding, external and ignored
+live-workspace rejection, and scorer isolation from runtime artifacts. The
+focused M7 suites pass 53 and the cumulative repository regression passes 1126
+in 304.33 seconds. The initial independent-review BLOCK and later repair
+history remain preserved; final re-audit dispatches ended in provider HTTP 429,
+so no independent PASS is claimed.
+
+This remains engineering evidence only. All 24 manifest entries are pending,
+unverified, and non-executable; no pilot, TER/PIP/BSR, or empirical RQ result
+is available. The human M7 exit gate and G2 authorization remain open, and M8
+has not started.
