@@ -10,9 +10,10 @@ from M6 baseline `9b90204` through `dd04cea`. This report records the
 reproducibility substrate only; it does not claim benchmark truth, a pilot, or
 an empirical result.
 
-The M7 engineering checkpoint is complete after an independent review found
-and the implementation closed trust-boundary blockers. The human M7 exit gate
-remains open. The 24 records are explicitly screened candidates with
+The M7 engineering checkpoint is complete for the implemented substrate after
+the initial review findings were repaired and covered by targeted regressions.
+The human M7 exit gate remains open. The 24 records are explicitly screened
+candidates with
 `human_approval: pending`, no immutable source commit, no verified license,
 and no executable gold checks. They are therefore not executable benchmark
 tasks and must not be counted as approved CapsuleBench evidence.
