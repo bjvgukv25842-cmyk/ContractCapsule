@@ -154,7 +154,9 @@ def _git_output(workspace: Path, *arguments: str) -> bytes:
     return completed.stdout.strip()
 
 
-def _validate_workspace(task: object, workspace: Path | str) -> Path:
+def _validate_workspace(
+    task: object, workspace: Path | str, task_root: Path
+) -> Path:
     raw = Path(workspace)
     if raw.is_symlink():
         raise RunRefusal("workspace must not be a symlink")
@@ -164,6 +166,12 @@ def _validate_workspace(task: object, workspace: Path | str) -> Path:
         raise RunRefusal("workspace must be a directory") from error
     if not root.is_dir():
         raise RunRefusal("workspace must be a directory")
+    if (
+        root == task_root
+        or root.is_relative_to(task_root)
+        or task_root.is_relative_to(root)
+    ):
+        raise RunRefusal("workspace must be separate from immutable task package")
     try:
         top_level = Path(_git_output(root, "rev-parse", "--show-toplevel").decode())
         head = _git_output(root, "rev-parse", "--verify", "HEAD").decode("ascii")
@@ -391,7 +399,7 @@ def run_once(
     if workspace is not None:
         if not isinstance(workspace, (str, Path)):
             raise RunRefusal("workspace must be a path")
-        validated_workspace = _validate_workspace(task, workspace)
+        validated_workspace = _validate_workspace(task, workspace, trusted_root)
     _validate_artifact_binding(task, artifact, parsed, trusted_root)
     task_id = _task_id(task)
     _assert_executable_task(task)
