@@ -16,7 +16,6 @@ from benchmark.schema import BenchmarkManifest, TaskSpec
 # Process-local capability.  A public ``TaskSpec.model_validate`` call cannot
 # manufacture this token; callers must come through ``load_task``.
 _LOADER_ATTESTATION = object()
-_RUNTIME_DIRS = frozenset({"__pycache__", ".pytest_cache"})
 
 
 class BenchmarkLoadError(ValueError):
@@ -127,8 +126,6 @@ def _package_digest(root: Path) -> str:
         relative = entry.relative_to(root)
         if entry.is_symlink():
             raise BenchmarkLoadError("symlinked task package entries are not allowed")
-        if any(part in _RUNTIME_DIRS for part in relative.parts):
-            continue
         if entry.is_dir():
             continue
         if not entry.is_file():

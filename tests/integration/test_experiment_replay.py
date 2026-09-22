@@ -478,6 +478,15 @@ def test_loaded_task_rejects_mutated_package_content(tmp_path: Path) -> None:
         run_once(task, config=_config(tmp_path), dry_run=True)
 
 
+def test_loaded_task_rejects_runtime_cache_injection(tmp_path: Path) -> None:
+    task = _task(tmp_path)
+    cache = tmp_path / "tests" / "__pycache__"
+    cache.mkdir()
+    (cache / "injected.pyc").write_bytes(b"untrusted runtime code")
+    with pytest.raises(RunRefusal, match="changed"):
+        run_once(task, config=_config(tmp_path), dry_run=True)
+
+
 def test_run_rejects_unattested_artifact_mappings(tmp_path: Path) -> None:
     task = _task(tmp_path)
     with pytest.raises(RunRefusal, match="artifact"):
