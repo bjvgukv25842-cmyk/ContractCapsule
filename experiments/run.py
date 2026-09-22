@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -116,6 +117,77 @@ def _trusted_task_root(task: object) -> Path:
     if not resolved.is_dir() or resolved.is_symlink():
         raise RunRefusal("loader task package root is unavailable")
     return resolved
+
+
+def _git_output(workspace: Path, *arguments: str) -> bytes:
+    env = {
+        key: value
+        for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
+        if (value := os.environ.get(key)) is not None
+    }
+    env["GIT_OPTIONAL_LOCKS"] = "0"
+    command = [
+        "git",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.untrackedCache=false",
+        "-C",
+        str(workspace),
+        *arguments,
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            check=False,
+            env=env,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RunRefusal("workspace Git validation failed") from error
+    if len(completed.stdout) > 1024 * 1024 or len(completed.stderr) > 1024 * 1024:
+        raise RunRefusal("workspace Git validation output exceeded limit")
+    if completed.returncode != 0:
+        raise RunRefusal("workspace Git validation failed")
+    return completed.stdout.strip()
+
+
+def _validate_workspace(task: object, workspace: Path | str) -> Path:
+    raw = Path(workspace)
+    if raw.is_symlink():
+        raise RunRefusal("workspace must not be a symlink")
+    try:
+        root = raw.resolve(strict=True)
+    except OSError as error:
+        raise RunRefusal("workspace must be a directory") from error
+    if not root.is_dir():
+        raise RunRefusal("workspace must be a directory")
+    try:
+        top_level = Path(_git_output(root, "rev-parse", "--show-toplevel").decode())
+        head = _git_output(root, "rev-parse", "--verify", "HEAD").decode("ascii")
+        origin = _git_output(root, "config", "--get", "remote.origin.url").decode()
+        status = _git_output(
+            root,
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--ignore-submodules=none",
+        )
+    except UnicodeError as error:
+        raise RunRefusal("workspace Git metadata is invalid") from error
+    if top_level.resolve() != root:
+        raise RunRefusal("workspace must be the Git checkout root")
+    if head != _repository_commit(task):
+        raise RunRefusal("workspace commit does not match task repository lock")
+    repository = _field(task, "repository", None)
+    source_url = _field(repository, "source_url", None)
+    if not isinstance(source_url, str) or origin != source_url:
+        raise RunRefusal("workspace origin does not match task repository lock")
+    if status:
+        raise RunRefusal("workspace must be clean before each independent run")
+    return root
 
 
 def _validate_artifact_binding(
@@ -315,15 +387,11 @@ def run_once(
     if artifact is not None and type(artifact) is not ContextArtifact:
         raise RunRefusal("artifact must be a ContextArtifact")
     trusted_root = _trusted_task_root(task)
+    validated_workspace: Path | None = None
     if workspace is not None:
         if not isinstance(workspace, (str, Path)):
             raise RunRefusal("workspace must be a path")
-        try:
-            requested_workspace = Path(workspace).resolve(strict=True)
-        except OSError as error:
-            raise RunRefusal("workspace must be a directory") from error
-        if requested_workspace != trusted_root:
-            raise RunRefusal("workspace must match loader task package")
+        validated_workspace = _validate_workspace(task, workspace)
     _validate_artifact_binding(task, artifact, parsed, trusted_root)
     task_id = _task_id(task)
     _assert_executable_task(task)
@@ -378,13 +446,9 @@ def run_once(
     if adapter is None:
         raise RunRefusal("adapter is required for live execution")
     _validate_adapter_identity(adapter, receipt)
-    raw_workspace: object = workspace if workspace is not None else trusted_root
-    if not isinstance(raw_workspace, (str, Path)):
-        raise RunRefusal("workspace must be a path")
-    run_root = Path(raw_workspace)
-    run_root = run_root.resolve()
-    if not run_root.is_dir():
-        raise RunRefusal("workspace must be a directory")
+    if validated_workspace is None:
+        raise RunRefusal("an attested clean workspace is required for live execution")
+    run_root = validated_workspace
     started = _timestamp()
     raw_path = selected_store.path.parent.resolve() / "raw" / f"{identity_record.run_id}.jsonl"
     raw_record_path = (Path("raw") / f"{identity_record.run_id}.jsonl").as_posix()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,6 +23,7 @@ def _write_task_package(
     approval: str = "approved",
     executable: bool = True,
     target_command: str = "tests/target.py",
+    repository_commit: str = "a" * 40,
 ) -> TaskSpec:
     for relative in (
         "capsules/old",
@@ -53,7 +55,7 @@ category: policy
 language: python
 repository:
   source_url: https://github.com/example/project
-  commit: {'a' * 40}
+  commit: {repository_commit}
   license: MIT
   source_status: verified
   content_digest: {digest}
@@ -80,6 +82,34 @@ checks:
 
 def _task(tmp_path: Path) -> TaskSpec:
     return _write_task_package(tmp_path)
+
+
+def _git_workspace(tmp_path: Path) -> tuple[Path, str]:
+    workspace = tmp_path
+    workspace.mkdir(parents=True, exist_ok=True)
+    commands = [
+        ["git", "init", "-q"],
+        ["git", "config", "user.email", "capsulebench@example.invalid"],
+        ["git", "config", "user.name", "CapsuleBench"],
+        ["git", "remote", "add", "origin", "https://github.com/example/project"],
+    ]
+    for command in commands:
+        subprocess.run(command, cwd=workspace, check=True, capture_output=True)
+    (workspace / "README.md").write_text("checkout\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=workspace, check=True)
+    subprocess.run(
+        ["git", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"],
+        cwd=workspace,
+        check=True,
+    )
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=workspace,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return workspace, commit
 
 
 def _config(tmp_path: Path) -> ExperimentConfig:
@@ -284,6 +314,8 @@ def test_live_run_rejects_adapter_metadata_drift_after_preflight(tmp_path: Path)
             )
 
     key = b"r" * 32
+    workspace, commit = _git_workspace(tmp_path / "workspace")
+    task = _write_task_package(tmp_path / "package", repository_commit=commit)
     receipt_path = tmp_path / "receipt.json"
     config = ExperimentConfig(
         study_id="drift",
@@ -299,10 +331,10 @@ def test_live_run_rejects_adapter_metadata_drift_after_preflight(tmp_path: Path)
     preflight_config(config, adapter=DriftAdapter(), signing_key=key)
     with pytest.raises(RunRefusal, match="result version"):
         run_once(
-            _task(tmp_path),
+            task,
             config=config,
             adapter=DriftAdapter(),
-            workspace=tmp_path,
+            workspace=workspace,
             dry_run=False,
             preflight_key=key,
         )
@@ -336,6 +368,8 @@ def test_live_run_rejects_usage_counts_not_bound_to_raw_events(tmp_path: Path) -
             )
 
     key = b"u" * 32
+    workspace, commit = _git_workspace(tmp_path / "workspace")
+    task = _write_task_package(tmp_path / "package", repository_commit=commit)
     receipt_path = tmp_path / "receipt.json"
     config = ExperimentConfig(
         study_id="usage",
@@ -351,10 +385,10 @@ def test_live_run_rejects_usage_counts_not_bound_to_raw_events(tmp_path: Path) -
     preflight_config(config, adapter=ForgedUsageAdapter(), signing_key=key)
     with pytest.raises(RunRefusal, match="raw digest"):
         run_once(
-            _task(tmp_path),
+            task,
             config=config,
             adapter=ForgedUsageAdapter(),
-            workspace=tmp_path,
+            workspace=workspace,
             dry_run=False,
             preflight_key=key,
         )
