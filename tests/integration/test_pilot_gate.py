@@ -147,3 +147,22 @@ def test_readiness_report_cannot_be_overwritten(tmp_path: Path) -> None:
     with pytest.raises(PilotGateError, match="cannot be overwritten"):
         _write_report(report_path, report)
     assert report_path.read_text(encoding="utf-8") == "original\n"
+
+
+def test_invalid_preflight_receipt_is_a_blocker(tmp_path: Path) -> None:
+    receipt_path = tmp_path / "preflight.json"
+    receipt_path.write_text("{}\n", encoding="utf-8")
+    config = _config(
+        preflight_receipt=receipt_path,
+        model="codex-frozen",
+        version="1.2.3",
+        binary="/usr/bin/codex",
+    )
+
+    report = validate_pilot_inputs(
+        config,
+        manifest_path=Path("benchmark/benchmark-manifest.json"),
+        protocol_path=Path("research/protocol.md"),
+    )
+
+    assert "preflight_receipt_invalid" in report.blockers

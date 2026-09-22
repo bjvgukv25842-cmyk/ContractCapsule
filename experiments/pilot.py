@@ -20,6 +20,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from benchmark.loader import BenchmarkLoadError, load_manifest
+from experiments.preflight import PreflightError, binary_digest, load_receipt
 
 PILOT_CONDITIONS = ("B0", "B2", "B4", "CC")
 PILOT_REPETITIONS = 2
@@ -232,6 +233,48 @@ def _append_unique(values: list[str], value: str) -> None:
         values.append(value)
 
 
+def _validate_preflight_receipt(config: PilotConfig, blockers: list[str]) -> None:
+    """Check receipt integrity and identity before a pilot can be enabled."""
+
+    receipt_path = config.preflight_receipt
+    if receipt_path is None:
+        _append_unique(blockers, "preflight_receipt_missing")
+        return
+    try:
+        receipt_missing = not receipt_path.is_file() or receipt_path.is_symlink()
+    except OSError:
+        receipt_missing = True
+    if receipt_missing:
+        _append_unique(blockers, "preflight_receipt_missing")
+        return
+    try:
+        receipt = load_receipt(receipt_path)
+    except (PreflightError, OSError, ValueError):
+        _append_unique(blockers, "preflight_receipt_invalid")
+        return
+    if not receipt.available:
+        _append_unique(blockers, "preflight_unavailable")
+    if not receipt.model or not receipt.version or not receipt.binary:
+        _append_unique(blockers, "preflight_metadata_incomplete")
+    if receipt.agent != config.agent:
+        _append_unique(blockers, "preflight_agent_mismatch")
+    if config.model is not None and receipt.model != config.model:
+        _append_unique(blockers, "preflight_model_mismatch")
+    if config.version is not None and receipt.version != config.version:
+        _append_unique(blockers, "preflight_version_mismatch")
+    if config.binary is not None and receipt.binary != config.binary:
+        _append_unique(blockers, "preflight_binary_mismatch")
+    if receipt.signature is None:
+        _append_unique(blockers, "preflight_signature_missing")
+    current_binary_digest = binary_digest(config.binary)
+    if (
+        receipt.binary_digest is None
+        or current_binary_digest is None
+        or receipt.binary_digest != current_binary_digest
+    ):
+        _append_unique(blockers, "preflight_binary_drift")
+
+
 def validate_pilot_inputs(
     config: PilotConfig,
     manifest_path: Path | str | None = None,
@@ -308,14 +351,19 @@ def validate_pilot_inputs(
                 _append_unique(blockers, "task_capsule_digest_missing")
 
     adjudication = manifest_file.parent / "adjudication.jsonl"
-    if not adjudication.is_file():
+    if not adjudication.is_file() or adjudication.is_symlink():
         _append_unique(blockers, "adjudication_missing")
+    else:
+        try:
+            if adjudication.stat().st_size == 0:
+                _append_unique(blockers, "adjudication_invalid")
+        except OSError:
+            _append_unique(blockers, "adjudication_invalid")
     if config.g2_authorization is None or not config.g2_authorization.strip():
         _append_unique(blockers, "g2_authorization_missing")
     if not config.model or not config.version or not config.binary:
         _append_unique(blockers, "agent_metadata_not_frozen")
-    if config.preflight_receipt is None or not config.preflight_receipt.is_file():
-        _append_unique(blockers, "preflight_receipt_missing")
+    _validate_preflight_receipt(config, blockers)
     if config.dry_run or not config.live_agent:
         _append_unique(blockers, "pilot_not_enabled")
     if config.output_path.exists():
