@@ -39,10 +39,10 @@
 - `PilotGateReport` records `ready`, blockers, warnings, digests, and the 48-cell count.
 - `load_pilot_config(path)`, `validate_pilot_inputs(config, manifest_path, protocol_path)`, and `build_pilot_schedule(config)` are deterministic and side-effect free.
 
-- [ ] Write failing tests for pending-task refusal, duplicate/missing strata, exact condition/repetition cardinality, protocol/manifest digest binding, and deterministic schedule ordering.
-- [ ] Run the focused tests and observe the expected failures before production code exists.
-- [ ] Implement strict YAML loading, immutable digest checks, loader-backed task validation, and structured blocker codes.
-- [ ] Run the focused gate tests to green.
+- [x] Write failing tests for pending-task refusal, duplicate/missing strata, exact condition/repetition cardinality, protocol/manifest digest binding, and deterministic schedule ordering.
+- [x] Run the focused tests and observe the expected failures before production code exists.
+- [x] Implement strict YAML loading, immutable digest checks, loader-backed task validation, and structured blocker codes.
+- [x] Run the focused gate tests to green.
 
 ### Task 2: Pilot configuration and non-destructive gate command
 
@@ -56,9 +56,9 @@
 - `python -m experiments.pilot --config experiments/configs/m8-pilot.yaml --check` writes only a readiness report and exits nonzero when G2 inputs are absent.
 - The checked-in configuration is explicitly non-executable (`dry_run: true`, no model/version/binary), and cannot be mistaken for pilot data.
 
-- [ ] Add tests proving the checked-in screening configuration produces blockers and never creates a run record.
-- [ ] Implement the CLI with atomic report creation and no adapter/network invocation.
-- [ ] Run the CLI test and inspect the JSON report.
+- [x] Add tests proving the checked-in screening configuration produces blockers and never creates a run record.
+- [x] Implement the CLI with atomic report creation and no adapter/network invocation.
+- [x] Run the CLI test and inspect the JSON report.
 
 ### Task 3: M7 residual closure and research evidence
 
@@ -69,11 +69,11 @@
 - Modify: `research/claim-evidence-matrix.md`
 - Modify: `research/ai-usage-ledger.jsonl`
 
-- [ ] Record the M7 residuals that prevent a legitimate pilot: screening-only manifest, absent immutable commits/licenses/gold checks, fewer than three verified language ecosystems, and no frozen agent model/version.
-- [ ] Record the gate execution, blocker codes, absence of pilot observations, and the exact frozen-file hashes.
-- [ ] Preserve the fact that no external outage or retry was converted into an experiment result.
-- [ ] Run focused M7 regression tests plus the M8 gate tests, Ruff, Mypy, JSONL validation, and `git diff --check`.
-- [ ] Stop at the M8 G2 survival decision; do not start M9.
+- [x] Record the M7 residuals that prevent a legitimate pilot: screening-only manifest, absent immutable commits/licenses/gold checks, fewer than three verified language ecosystems, and no frozen agent model/version.
+- [x] Record the gate execution, blocker codes, absence of pilot observations, and the exact frozen-file hashes.
+- [x] Preserve the fact that no external outage or retry was converted into an experiment result.
+- [x] Run focused M7 regression tests plus the M8 gate tests, Ruff, Mypy, JSONL validation, and `git diff --check`.
+- [x] Stop at the M8 G2 survival decision; do not start M9.
 
 ## Exit Gate
 
@@ -82,3 +82,7 @@ fail-closed, the current environment has been checked, no invalid pilot run has
 been emitted, and the report clearly distinguishes readiness evidence from
 pilot observations. Proceeding to an actual 48-run pilot requires a later
 author decision supplying the missing G2 inputs; this plan does not invent them.
+
+Recorded outcome (2026-09-22): the engineering gate is complete and refused the
+current screening manifest with exit status `2`; the empirical 48-run pilot is
+deferred until the author-controlled G2 inputs are supplied.
