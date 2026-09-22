@@ -20,7 +20,8 @@ recorded in the commit that contains this report.
 - `experiments/pilot.py` adds strict, immutable pilot configuration models,
   deterministic six-task/condition/repetition scheduling, digest-bound
   manifest and protocol checks, loader-backed task checks, preflight receipt
-  integrity/identity checks, and structured fail-closed blocker codes.
+  integrity/identity/signature checks, bounded adjudication JSONL parsing, and
+  structured fail-closed blocker codes.
 - `experiments/configs/m8-pilot.yaml` declares the exact 48-cell scope but is
   explicitly non-executable (`dry_run: true`, `live_agent: false`, and no
   model/version/binary).

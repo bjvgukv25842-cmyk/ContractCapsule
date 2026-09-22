@@ -81,7 +81,10 @@ class PilotConfig(_PilotModel):
         if value is None:
             return None
         if isinstance(value, (str, Path)):
-            return Path(value)
+            candidate = Path(value)
+            if "\x00" in str(candidate) or not str(candidate):
+                raise ValueError("path fields must be non-empty and NUL-free")
+            return candidate
         raise TypeError("path fields must be strings or paths")
 
     @field_validator("task_ids", mode="before")
@@ -212,7 +215,14 @@ def load_pilot_config(path: Path | str) -> PilotConfig:
         raise PilotConfigError("pilot config must be a regular file")
     try:
         raw = yaml.load(config_path.read_text(encoding="utf-8"), Loader=_UniqueLoader)
-    except (OSError, UnicodeError, yaml.YAMLError, PilotConfigError) as error:
+    except (
+        OSError,
+        UnicodeError,
+        TypeError,
+        ValueError,
+        yaml.YAMLError,
+        PilotConfigError,
+    ) as error:
         raise PilotConfigError("pilot config syntax is invalid") from error
     if not isinstance(raw, Mapping):
         raise PilotConfigError("pilot config root must be an object")
@@ -223,9 +233,12 @@ def load_pilot_config(path: Path | str) -> PilotConfig:
 
 
 def _file_digest(path: Path) -> str:
-    if path.is_symlink() or not path.is_file():
-        raise OSError("input must be a regular file")
-    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+    try:
+        if path.is_symlink() or not path.is_file():
+            raise OSError("input must be a regular file")
+        return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+    except (OSError, ValueError) as error:
+        raise OSError("input must be a regular file") from error
 
 
 def _append_unique(values: list[str], value: str) -> None:
@@ -233,7 +246,11 @@ def _append_unique(values: list[str], value: str) -> None:
         values.append(value)
 
 
-def _validate_preflight_receipt(config: PilotConfig, blockers: list[str]) -> None:
+def _validate_preflight_receipt(
+    config: PilotConfig,
+    blockers: list[str],
+    signing_key: bytes | None,
+) -> None:
     """Check receipt integrity and identity before a pilot can be enabled."""
 
     receipt_path = config.preflight_receipt
@@ -266,6 +283,10 @@ def _validate_preflight_receipt(config: PilotConfig, blockers: list[str]) -> Non
         _append_unique(blockers, "preflight_binary_mismatch")
     if receipt.signature is None:
         _append_unique(blockers, "preflight_signature_missing")
+    elif type(signing_key) is not bytes or len(signing_key) < 32:
+        _append_unique(blockers, "preflight_signature_unverified")
+    elif not receipt.verify_signature(signing_key):
+        _append_unique(blockers, "preflight_signature_invalid")
     current_binary_digest = binary_digest(config.binary)
     if (
         receipt.binary_digest is None
@@ -275,10 +296,63 @@ def _validate_preflight_receipt(config: PilotConfig, blockers: list[str]) -> Non
         _append_unique(blockers, "preflight_binary_drift")
 
 
+def _unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if type(key) is not str or key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def _validate_adjudication(path: Path, blockers: list[str]) -> None:
+    """Require a bounded, non-empty JSONL adjudication record."""
+
+    try:
+        if path.is_symlink() or not path.is_file():
+            _append_unique(blockers, "adjudication_missing")
+            return
+        if path.stat().st_size == 0 or path.stat().st_size > 1_048_576:
+            _append_unique(blockers, "adjudication_invalid")
+            return
+        records = 0
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            value = json.loads(line, object_pairs_hook=_unique_json_pairs)
+            if not isinstance(value, dict):
+                raise TypeError("adjudication row must be an object")
+            records += 1
+        if records == 0:
+            _append_unique(blockers, "adjudication_invalid")
+    except (OSError, UnicodeError, TypeError, ValueError, json.JSONDecodeError):
+        _append_unique(blockers, "adjudication_invalid")
+
+
+def _path_present(path: Path) -> bool:
+    try:
+        return path.exists() or path.is_symlink()
+    except (OSError, ValueError):
+        return True
+
+
+def _load_signing_key(path_value: str | None) -> bytes | None:
+    if path_value is None:
+        return None
+    try:
+        path = Path(path_value)
+        if path.is_symlink() or not path.is_file():
+            raise PilotGateError("preflight signing key must be a regular file")
+        return path.read_bytes()
+    except (OSError, ValueError) as error:
+        raise PilotGateError("preflight signing key could not be read") from error
+
+
 def validate_pilot_inputs(
     config: PilotConfig,
     manifest_path: Path | str | None = None,
     protocol_path: Path | str | None = None,
+    preflight_signing_key: bytes | None = None,
 ) -> PilotGateReport:
     """Validate all author-controlled prerequisites before any agent call."""
 
@@ -312,7 +386,7 @@ def validate_pilot_inputs(
 
     try:
         manifest = load_manifest(manifest_file)
-    except (BenchmarkLoadError, OSError) as error:
+    except (BenchmarkLoadError, OSError, ValueError) as error:
         del error
         _append_unique(blockers, "manifest_load_failed")
 
@@ -351,23 +425,18 @@ def validate_pilot_inputs(
                 _append_unique(blockers, "task_capsule_digest_missing")
 
     adjudication = manifest_file.parent / "adjudication.jsonl"
-    if not adjudication.is_file() or adjudication.is_symlink():
-        _append_unique(blockers, "adjudication_missing")
-    else:
-        try:
-            if adjudication.stat().st_size == 0:
-                _append_unique(blockers, "adjudication_invalid")
-        except OSError:
-            _append_unique(blockers, "adjudication_invalid")
+    _validate_adjudication(adjudication, blockers)
     if config.g2_authorization is None or not config.g2_authorization.strip():
         _append_unique(blockers, "g2_authorization_missing")
     if not config.model or not config.version or not config.binary:
         _append_unique(blockers, "agent_metadata_not_frozen")
-    _validate_preflight_receipt(config, blockers)
+    _validate_preflight_receipt(config, blockers, preflight_signing_key)
     if config.dry_run or not config.live_agent:
         _append_unique(blockers, "pilot_not_enabled")
-    if config.output_path.exists():
+    if _path_present(config.output_path):
         _append_unique(blockers, "pilot_output_exists")
+    if _path_present(config.raw_output_dir):
+        _append_unique(blockers, "pilot_raw_output_exists")
     if config.scheduled_runs != PILOT_SCHEDULE_SIZE:
         _append_unique(blockers, "schedule_cardinality")
 
@@ -409,9 +478,12 @@ def build_pilot_schedule(config: PilotConfig) -> tuple[PilotRunSpec, ...]:
 
 
 def _write_report(path: Path, report: PilotGateReport) -> None:
-    if path.exists() or path.is_symlink():
-        raise PilotGateError("readiness report cannot be overwritten")
-    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if path.exists() or path.is_symlink():
+            raise PilotGateError("readiness report cannot be overwritten")
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as error:
+        raise PilotGateError("readiness report path is invalid") from error
     encoded = json.dumps(report.model_dump(mode="json"), sort_keys=True, indent=2) + "\n"
     descriptor: int | None = None
     try:
@@ -440,11 +512,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", default=None)
     parser.add_argument("--protocol", default=None)
     parser.add_argument("--report", default=None)
+    parser.add_argument("--preflight-key", default=None)
     parser.add_argument("--check", action="store_true", help="check readiness")
     args = parser.parse_args(argv)
     try:
         config = load_pilot_config(args.config)
-        report = validate_pilot_inputs(config, args.manifest, args.protocol)
+        signing_key = _load_signing_key(args.preflight_key)
+        report = validate_pilot_inputs(
+            config,
+            args.manifest,
+            args.protocol,
+            preflight_signing_key=signing_key,
+        )
         target = Path(args.report) if args.report is not None else config.readiness_report_path
         _write_report(target, report)
     except (PilotConfigError, PilotGateError) as error:

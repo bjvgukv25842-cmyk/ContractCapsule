@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
+from experiments.models import PreflightReceipt
 from experiments.pilot import (
     PilotConfig,
     PilotGateError,
@@ -14,6 +16,7 @@ from experiments.pilot import (
     main,
     validate_pilot_inputs,
 )
+from experiments.preflight import binary_digest
 
 TASK_IDS = tuple(f"candidate-{index:03d}" for index in range(1, 7))
 STRATA = {task_id: f"stratum-{index}" for index, task_id in enumerate(TASK_IDS, 1)}
@@ -166,3 +169,99 @@ def test_invalid_preflight_receipt_is_a_blocker(tmp_path: Path) -> None:
     )
 
     assert "preflight_receipt_invalid" in report.blockers
+
+
+def _signed_receipt(path: Path, key: bytes) -> None:
+    binary = sys.executable
+    receipt = PreflightReceipt(
+        config_digest="sha256:" + "a" * 64,
+        agent="codex",
+        version="codex-test",
+        model="codex-model",
+        binary=binary,
+        binary_digest=binary_digest(binary),
+        capabilities=("test",),
+        available=True,
+    )
+    receipt = receipt.model_copy(
+        update={
+            "digest": receipt.computed_digest(),
+            "signature": receipt.computed_signature(key),
+        }
+    )
+    path.write_text(
+        json.dumps(receipt.model_dump(mode="json")) + "\n", encoding="utf-8"
+    )
+
+
+def test_preflight_signature_must_be_verified(tmp_path: Path) -> None:
+    key = b"k" * 32
+    receipt_path = tmp_path / "preflight.json"
+    _signed_receipt(receipt_path, key)
+    config = _config(
+        preflight_receipt=receipt_path,
+        model="codex-model",
+        version="codex-test",
+        binary=sys.executable,
+    )
+
+    without_key = validate_pilot_inputs(
+        config,
+        manifest_path=Path("benchmark/benchmark-manifest.json"),
+        protocol_path=Path("research/protocol.md"),
+    )
+    assert "preflight_signature_unverified" in without_key.blockers
+
+    payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    payload["signature"] = "sha256:" + "0" * 64
+    receipt_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    forged = validate_pilot_inputs(
+        config,
+        manifest_path=Path("benchmark/benchmark-manifest.json"),
+        protocol_path=Path("research/protocol.md"),
+        preflight_signing_key=key,
+    )
+    assert "preflight_signature_invalid" in forged.blockers
+
+
+def test_dangling_pilot_output_symlink_is_a_blocker(tmp_path: Path) -> None:
+    output_path = tmp_path / "runs.jsonl"
+    output_path.symlink_to(tmp_path / "missing-runs.jsonl")
+    config = _config(output_path=output_path)
+
+    report = validate_pilot_inputs(
+        config,
+        manifest_path=Path("benchmark/benchmark-manifest.json"),
+        protocol_path=Path("research/protocol.md"),
+    )
+
+    assert "pilot_output_exists" in report.blockers
+
+
+def test_existing_raw_pilot_output_is_a_blocker(tmp_path: Path) -> None:
+    raw_output_dir = tmp_path / "raw"
+    raw_output_dir.mkdir()
+    config = _config(raw_output_dir=raw_output_dir)
+
+    report = validate_pilot_inputs(
+        config,
+        manifest_path=Path("benchmark/benchmark-manifest.json"),
+        protocol_path=Path("research/protocol.md"),
+    )
+
+    assert "pilot_raw_output_exists" in report.blockers
+
+
+def test_invalid_adjudication_jsonl_is_a_blocker(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "benchmark-manifest.json"
+    adjudication_path = tmp_path / "adjudication.jsonl"
+    adjudication_path.write_text("{}\nnot-json\n", encoding="utf-8")
+    config = _config()
+
+    report = validate_pilot_inputs(
+        config,
+        manifest_path=manifest_path,
+        protocol_path=Path("research/protocol.md"),
+    )
+
+    assert "adjudication_invalid" in report.blockers

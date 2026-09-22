@@ -55,9 +55,11 @@
 **Interfaces:**
 - `python -m experiments.pilot --config experiments/configs/m8-pilot.yaml --check` writes only a readiness report and exits nonzero when G2 inputs are absent.
 - The checked-in configuration is explicitly non-executable (`dry_run: true`, no model/version/binary), and cannot be mistaken for pilot data.
+- A future live check must supply the out-of-tree preflight signing key with
+  `--preflight-key`; the key is never committed or printed.
 
 - [x] Add tests proving the checked-in screening configuration produces blockers and never creates a run record.
-- [x] Implement the CLI with atomic report creation and no adapter/network invocation.
+- [x] Implement the CLI with atomic report creation, signature-key plumbing, and no adapter/network invocation.
 - [x] Run the CLI test and inspect the JSON report.
 
 ### Task 3: M7 residual closure and research evidence
