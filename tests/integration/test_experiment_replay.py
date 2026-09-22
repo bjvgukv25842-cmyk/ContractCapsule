@@ -387,6 +387,7 @@ def test_run_plan_is_bound_to_declared_condition_matrix(tmp_path: Path) -> None:
         agent="codex",
         conditions=("CC",),
         repetitions=1,
+        runtime_budget_tokens=128,
         output_path=tmp_path / "matrix.jsonl",
     )
     artifact = provider_for("B0").provide(task, Budget(128))
@@ -436,6 +437,13 @@ def test_loaded_task_is_revalidated_before_execution(tmp_path: Path) -> None:
         run_once(task, config=_config(tmp_path), dry_run=True)
 
 
+def test_loaded_task_rejects_mutated_package_content(tmp_path: Path) -> None:
+    task = _task(tmp_path)
+    (tmp_path / "capsules/old/context.md").write_text("mutated\n", encoding="utf-8")
+    with pytest.raises(RunRefusal, match="changed"):
+        run_once(task, config=_config(tmp_path), dry_run=True)
+
+
 def test_run_rejects_unattested_artifact_mappings(tmp_path: Path) -> None:
     task = _task(tmp_path)
     with pytest.raises(RunRefusal, match="artifact"):
@@ -443,6 +451,45 @@ def test_run_rejects_unattested_artifact_mappings(tmp_path: Path) -> None:
             task,
             config=_config(tmp_path),
             artifact={"condition": "B0"},
+            dry_run=True,
+        )
+
+
+def test_run_rejects_external_workspace(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    task = _task(package)
+    external = tmp_path / "external"
+    external.mkdir()
+    with pytest.raises(RunRefusal, match="workspace"):
+        run_once(
+            task,
+            config=_config(package),
+            workspace=external,
+            dry_run=True,
+        )
+
+
+def test_run_rejects_cross_task_artifact(tmp_path: Path) -> None:
+    task_a = _task(tmp_path / "task-a")
+    task_b = _task(tmp_path / "task-b")
+    artifact = provider_for("B0").provide(task_b, Budget(128))
+    with pytest.raises(RunRefusal, match="artifact .*binding"):
+        run_once(
+            task_a,
+            config=_config(tmp_path / "task-a"),
+            artifact=artifact,
+            dry_run=True,
+        )
+
+
+def test_run_rejects_artifact_budget_mismatch(tmp_path: Path) -> None:
+    task = _task(tmp_path)
+    artifact = provider_for("B0").provide(task, Budget(1))
+    with pytest.raises(RunRefusal, match="budget"):
+        run_once(
+            task,
+            config=_config(tmp_path),
+            artifact=artifact,
             dry_run=True,
         )
 
@@ -466,6 +513,7 @@ def test_scorer_uses_declared_relative_tests_and_ignores_condition_labels(
         "import sys\nprint('ok' if 'B0' not in sys.argv else 'bad')\n",
         encoding="utf-8",
     )
+    task = load_task(tmp_path)
     result = score_task(
         task,
         condition="B0",
@@ -478,6 +526,14 @@ def test_scorer_uses_declared_relative_tests_and_ignores_condition_labels(
     assert result.condition is None
     with pytest.raises(ScoreError):
         score_task(task, command=["python3", "../escape.py"], cwd=tmp_path)
+
+
+def test_scorer_rejects_external_cwd(tmp_path: Path) -> None:
+    task = _task(tmp_path / "package")
+    external = tmp_path / "external"
+    external.mkdir()
+    with pytest.raises(ScoreError, match="match loader task package"):
+        score_task(task, cwd=external)
 
 
 def test_scorer_refuses_unvalidated_mapping_with_forged_checks(tmp_path: Path) -> None:
@@ -506,9 +562,8 @@ def test_scorer_rejects_declared_symlink_paths(tmp_path: Path) -> None:
     outside = tmp_path.parent / "outside-test.py"
     outside.write_text("print('outside')\n", encoding="utf-8")
     link = tmp_path / "tests" / "link.py"
-    _write_task_package(tmp_path, target_command="tests/link.py")
+    task = _write_task_package(tmp_path, target_command="tests/link.py")
     link.symlink_to(outside)
-    task = load_task(tmp_path)
     with pytest.raises(ScoreError, match="symlink"):
         score_task(task, cwd=tmp_path)
 

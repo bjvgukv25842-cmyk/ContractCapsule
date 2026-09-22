@@ -16,6 +16,7 @@ from benchmark.schema import BenchmarkManifest, TaskSpec
 # Process-local capability.  A public ``TaskSpec.model_validate`` call cannot
 # manufacture this token; callers must come through ``load_task``.
 _LOADER_ATTESTATION = object()
+_RUNTIME_DIRS = frozenset({"__pycache__", ".pytest_cache"})
 
 
 class BenchmarkLoadError(ValueError):
@@ -97,6 +98,53 @@ def _contained_file(root: Path, relative: str) -> Path:
     return candidate
 
 
+def _reject_symlink_components(path: Path) -> Path:
+    """Reject a package path whose parent components redirect elsewhere."""
+
+    absolute = path if path.is_absolute() else Path.cwd() / path
+    probe = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        probe /= part
+        if probe.is_symlink():
+            # macOS exposes /tmp and /var as stable aliases into /private.
+            # They are OS namespace aliases, not caller-controlled redirects.
+            resolved = probe.resolve(strict=False)
+            if not (
+                probe in {Path("/tmp"), Path("/var")}
+                and resolved.parent == Path("/private")
+            ):
+                raise BenchmarkLoadError(
+                    "symlinked task package components are not allowed"
+                )
+    return absolute
+
+
+def _package_digest(root: Path) -> str:
+    """Hash authoritative package files in a deterministic order."""
+
+    entries: list[Path] = []
+    for entry in root.rglob("*"):
+        relative = entry.relative_to(root)
+        if entry.is_symlink():
+            raise BenchmarkLoadError("symlinked task package entries are not allowed")
+        if any(part in _RUNTIME_DIRS for part in relative.parts):
+            continue
+        if entry.is_dir():
+            continue
+        if not entry.is_file():
+            raise BenchmarkLoadError("task package contains a non-regular entry")
+        entries.append(relative)
+    digest = hashlib.sha256()
+    for relative in sorted(entries, key=lambda item: item.as_posix()):
+        data = (root / relative).read_bytes()
+        encoded_path = relative.as_posix().encode("utf-8")
+        digest.update(len(encoded_path).to_bytes(8, "big"))
+        digest.update(encoded_path)
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(data)
+    return "sha256:" + digest.hexdigest()
+
+
 def _package_entry(root: Path, relative: str, *, directory: bool) -> Path:
     """Resolve a required package entry without following symlink components."""
 
@@ -157,7 +205,7 @@ def _require_complete_package(root: Path) -> None:
 def load_task(task_dir: Path) -> TaskSpec:
     """Load one task package without following paths outside its root."""
 
-    root = Path(task_dir)
+    root = _reject_symlink_components(Path(task_dir))
     if not root.is_dir() or root.is_symlink():
         raise BenchmarkLoadError("task package must be a real directory")
     task_yaml = _contained_file(root, "task.yaml")
@@ -197,8 +245,10 @@ def load_task(task_dir: Path) -> TaskSpec:
         raise BenchmarkLoadError("approved task repository.lock is missing")
     if task.human_approval.value == "approved":
         _require_complete_package(root)
+    package_digest = _package_digest(root)
     object.__setattr__(task, "_loader_attestation", _LOADER_ATTESTATION)
     object.__setattr__(task, "_loader_root", root.resolve())
+    object.__setattr__(task, "_loader_package_digest", package_digest)
     return task
 
 
@@ -217,7 +267,11 @@ def require_loaded_task(task: object) -> TaskSpec:
     if not isinstance(root, Path):
         raise BenchmarkLoadError("loader task package root is unavailable")
     current = load_task(root)
-    if current.model_dump(mode="python") != task.model_dump(mode="python"):
+    if (
+        current.model_dump(mode="python") != task.model_dump(mode="python")
+        or getattr(current, "_loader_package_digest", None)
+        != getattr(task, "_loader_package_digest", None)
+    ):
         raise BenchmarkLoadError("task package changed after loading")
     return current
 

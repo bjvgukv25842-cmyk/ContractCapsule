@@ -105,6 +105,50 @@ def _artifact_data(artifact: object | None) -> tuple[tuple[str, ...], str | None
     )
 
 
+def _trusted_task_root(task: object) -> Path:
+    root = getattr(task, "_loader_root", None)
+    if not isinstance(root, Path):
+        raise RunRefusal("loader task package root is unavailable")
+    try:
+        resolved = root.resolve(strict=True)
+    except OSError as error:
+        raise RunRefusal("loader task package root is unavailable") from error
+    if not resolved.is_dir() or resolved.is_symlink():
+        raise RunRefusal("loader task package root is unavailable")
+    return resolved
+
+
+def _validate_artifact_binding(
+    task: object,
+    artifact: ContextArtifact | None,
+    config: ExperimentConfig,
+    trusted_root: Path,
+) -> None:
+    if artifact is None:
+        return
+    if getattr(artifact, "_provider_task_id", None) != _task_id(task):
+        raise RunRefusal("artifact task binding does not match task")
+    expected_commit = _repository_commit(task)
+    if getattr(artifact, "_provider_repository_commit", None) != expected_commit:
+        raise RunRefusal("artifact repository binding does not match task")
+    raw_root = getattr(artifact, "_provider_package_root", None)
+    if not isinstance(raw_root, str):
+        raise RunRefusal("artifact package binding is unavailable")
+    try:
+        artifact_root = Path(raw_root).resolve(strict=True)
+    except OSError as error:
+        raise RunRefusal("artifact package binding is unavailable") from error
+    if artifact_root != trusted_root:
+        raise RunRefusal("artifact package binding does not match task")
+    expected_package_digest = getattr(task, "_loader_package_digest", None)
+    if not isinstance(expected_package_digest, str):
+        raise RunRefusal("loader task package digest is unavailable")
+    if getattr(artifact, "_provider_package_digest", None) != expected_package_digest:
+        raise RunRefusal("artifact package digest does not match task")
+    if artifact.budget.max_tokens != config.runtime_budget_tokens:
+        raise RunRefusal("artifact budget does not match experiment budget")
+
+
 def _prompt_digest(task: object, artifact: object | None) -> str:
     prompt = _field(task, "prompt", "")
     if not isinstance(prompt, str):
@@ -270,6 +314,17 @@ def run_once(
         raise RunRefusal("artifact must be produced by a context provider")
     if artifact is not None and type(artifact) is not ContextArtifact:
         raise RunRefusal("artifact must be a ContextArtifact")
+    trusted_root = _trusted_task_root(task)
+    if workspace is not None:
+        if not isinstance(workspace, (str, Path)):
+            raise RunRefusal("workspace must be a path")
+        try:
+            requested_workspace = Path(workspace).resolve(strict=True)
+        except OSError as error:
+            raise RunRefusal("workspace must be a directory") from error
+        if requested_workspace != trusted_root:
+            raise RunRefusal("workspace must match loader task package")
+    _validate_artifact_binding(task, artifact, parsed, trusted_root)
     task_id = _task_id(task)
     _assert_executable_task(task)
     condition = _field(artifact, "condition", _field(task, "condition", "B0"))
@@ -323,9 +378,7 @@ def run_once(
     if adapter is None:
         raise RunRefusal("adapter is required for live execution")
     _validate_adapter_identity(adapter, receipt)
-    raw_workspace: object = workspace
-    if raw_workspace is None:
-        raw_workspace = _field(task, "package_root", Path.cwd())
+    raw_workspace: object = workspace if workspace is not None else trusted_root
     if not isinstance(raw_workspace, (str, Path)):
         raise RunRefusal("workspace must be a path")
     run_root = Path(raw_workspace)

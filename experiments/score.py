@@ -45,22 +45,25 @@ _MAX_OUTPUT = 1024 * 1024
 
 
 def _task_root(task: object, cwd: Path | str | None) -> Path:
-    candidate = cwd
-    if candidate is None:
-        for name in ("package_root", "root", "task_root"):
-            candidate = getattr(task, name, None)
-            if candidate is None and isinstance(task, Mapping):
-                candidate = task.get(name)
-            if candidate is not None:
-                break
-    if candidate is None:
-        raise ScoreError("task root/cwd is required")
-    root = Path(candidate)
-    if not root.is_absolute():
-        root = root.resolve()
-    if root.is_symlink() or not root.is_dir():
-        raise ScoreError("task root must be a regular directory")
-    return root.resolve()
+    trusted = getattr(task, "_loader_root", None)
+    if not isinstance(trusted, Path):
+        raise ScoreError("loader task package root is unavailable")
+    try:
+        trusted_root = trusted.resolve(strict=True)
+    except OSError as error:
+        raise ScoreError("loader task package root is unavailable") from error
+    if not trusted_root.is_dir() or trusted_root.is_symlink():
+        raise ScoreError("loader task package root is unavailable")
+    if cwd is None:
+        return trusted_root
+    root = Path(cwd)
+    try:
+        resolved = root.resolve(strict=True)
+    except OSError as error:
+        raise ScoreError("scoring cwd is unavailable") from error
+    if resolved != trusted_root:
+        raise ScoreError("scoring cwd must match loader task package")
+    return resolved
 
 
 def _safe_relative(value: str) -> bool:
@@ -240,7 +243,10 @@ def score_task(
     executable = _check_attr(task, "executable", False)
     if approval_value != "approved" or executable is not True or source_status != "verified":
         raise ScoreError("task is not human-approved and executable")
-    root = _task_root(task, cwd or task_root or workspace)
+    roots = [value for value in (cwd, task_root, workspace) if value is not None]
+    if len(roots) > 1 and any(value != roots[0] for value in roots[1:]):
+        raise ScoreError("scoring roots disagree")
+    root = _task_root(task, roots[0] if roots else None)
     declared = _declared_checks(task)
     if any(not declared[category] for category in ("target", "invariant", "spillover")):
         raise ScoreError("approved benchmark tasks require target, invariant, and spillover checks")

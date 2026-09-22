@@ -106,6 +106,7 @@ class TaskSpec(StrictFrozenModel):
     # identity, but execution/scoring must reject caller-forged schema models.
     _loader_attestation: object | None = PrivateAttr(default=None)
     _loader_root: Path | None = PrivateAttr(default=None)
+    _loader_package_digest: str | None = PrivateAttr(default=None)
 
     task_id: TaskId
     category: Category

@@ -134,6 +134,18 @@ class ContextArtifact:
     _provider_attestation: object | None = field(
         default=None, init=False, repr=False, compare=False
     )
+    _provider_task_id: str | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _provider_repository_commit: str | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _provider_package_root: str | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _provider_package_digest: str | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         try:
@@ -217,8 +229,23 @@ class ContextArtifact:
         }
 
 
-def _attest_artifact(artifact: ContextArtifact) -> ContextArtifact:
+def _attest_artifact(
+    artifact: ContextArtifact,
+    *,
+    task_id: str | None,
+    repository_commit: str | None,
+    package_root: Path | None,
+    package_digest: str | None,
+) -> ContextArtifact:
     object.__setattr__(artifact, "_provider_attestation", _PROVIDER_ATTESTATION)
+    object.__setattr__(artifact, "_provider_task_id", task_id)
+    object.__setattr__(artifact, "_provider_repository_commit", repository_commit)
+    object.__setattr__(
+        artifact,
+        "_provider_package_root",
+        str(package_root) if package_root is not None else None,
+    )
+    object.__setattr__(artifact, "_provider_package_digest", package_digest)
     return artifact
 
 
@@ -307,6 +334,18 @@ class ContextProvider(ABC):
             and source_paths[0].startswith("compiled-view:")
         ):
             metadata["view_manifest_digest"] = source_paths[0].split(":", 1)[1]
+        base_task = _base_task(selected)
+        task_id = _lookup(base_task, "task_id")
+        repository = _lookup(base_task, "repository")
+        repository_commit = _lookup(repository, "commit")
+        if task_id is not None and not isinstance(task_id, str):
+            raise ProviderError("task_id is invalid")
+        if repository_commit is not None and not isinstance(repository_commit, str):
+            raise ProviderError("repository commit is invalid")
+        package_root = _task_root(selected)
+        package_digest = getattr(base_task, "_loader_package_digest", None)
+        if package_digest is not None and not isinstance(package_digest, str):
+            raise ProviderError("task package digest is invalid")
         return _attest_artifact(
             ContextArtifact(
                 condition=self.condition,
@@ -316,7 +355,11 @@ class ContextProvider(ABC):
                 budget=normalized,
                 byte_count=byte_count,
                 metadata=metadata,
-            )
+            ),
+            task_id=task_id,
+            repository_commit=repository_commit,
+            package_root=package_root,
+            package_digest=package_digest,
         )
 
     # These aliases make the boundary convenient for the experiment harness
@@ -365,6 +408,10 @@ def _lookup(task: object, *names: str) -> object | None:
     return None
 
 
+def _base_task(task: object) -> object:
+    return task.task if isinstance(task, _TaskOverride) else task
+
+
 def _path_value(value: object) -> str | None:
     if isinstance(value, (str, Path)):
         return str(value)
@@ -388,6 +435,8 @@ def _task_root(task: object) -> Path | None:
         "root",
         "path",
     )
+    if raw is None:
+        raw = getattr(_base_task(task), "_loader_root", None)
     if raw is None:
         return None
     value = _path_value(raw)

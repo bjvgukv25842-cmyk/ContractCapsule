@@ -134,6 +134,22 @@ def test_task_loader_rejects_symlinked_task_yaml(tmp_path: Path) -> None:
         load_task(task_dir)
 
 
+def test_task_loader_rejects_symlinked_parent_component(tmp_path: Path) -> None:
+    real_parent = tmp_path / "real-parent"
+    real_task = real_parent / "task"
+    real_task.mkdir(parents=True)
+    (real_task / "task.yaml").write_text(
+        "task_id: parent-link\ncategory: policy\nlanguage: python\n"
+        "repository: {source_url: https://github.com/x/y, commit: null, license: pending-verification, source_status: unverified}\n"
+        "human_approval: pending\nexecutable: false\nmax_runtime_seconds: 10\n",
+        encoding="utf-8",
+    )
+    linked_parent = tmp_path / "linked-parent"
+    linked_parent.symlink_to(real_parent, target_is_directory=True)
+    with pytest.raises(BenchmarkLoadError, match="symlink"):
+        load_task(linked_parent / "task")
+
+
 def test_approved_task_requires_complete_capsulebench_package_layout(tmp_path: Path) -> None:
     task_dir = tmp_path / "approved-task"
     task_dir.mkdir()
