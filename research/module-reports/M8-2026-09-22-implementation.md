@@ -64,6 +64,10 @@ No new observation was generated. No retry, provider outage, or external
 condition was used to replace a valid result. The prior M7 HTTP 429 events are
 retained as operational limitations only.
 
+A separate read-only M8 audit was requested but interrupted before a verdict;
+no independent PASS is inferred from that attempt. The local focused and
+cumulative regressions above are the available engineering verification.
+
 ## Frozen hashes and decisions
 
 - CCS-2.1: `aaddaa8def8df1ef2efbe4f9487de0ba86a60ae5aed8955ca76f5e070fa01e5c`
