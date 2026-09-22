@@ -292,3 +292,21 @@ This remains engineering evidence only. All 24 manifest entries are pending,
 unverified, and non-executable; no pilot, TER/PIP/BSR, or empirical RQ result
 is available. The human M7 exit gate and G2 authorization remain open, and M8
 has not started.
+
+### M8 Pilot Readiness Gate (2026-09-22)
+
+The M8 gate implementation is complete as an engineering boundary at exact
+scope (6 tasks x 4 conditions x 2 repetitions = 48 cells). The checked-in
+configuration is non-executable and the current screening manifest was refused
+before any adapter or network call. The readiness report and exact blocker
+list are in `research/pilot-report.md`.
+
+| Claim/question | M8 engineering evidence | Still missing |
+|---|---|---|
+| C3 benchmark | Screening candidates are rejected unless approval, immutable source/license locks, capsule digests, executable gold checks, adjudication, and ecosystem coverage are present | Human-approved 24-task benchmark and >=25% second-review agreement |
+| C4 comparison | Deterministic 48-cell schedule, digest-bound readiness report, exclusive report creation, and disabled live mode | G2-approved pilot runs, observations, TER/PIP/BSR, cost, and statistical outcomes |
+| C5 reproducibility | Frozen-file hashes, module report, decision entry, focused tests, valid JSON report, and no run output | Clean external replay, raw pilot archive, and submission audit |
+| RQ1-RQ4 | No agent observation was generated; no outage or retry replaced a result | All prospective task measurements and analyses |
+
+This entry is a survival/readiness decision, not an empirical result. The human
+M7 exit and G2 authorization remain open; M9 was not started.

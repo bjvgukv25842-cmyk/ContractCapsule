@@ -1601,3 +1601,25 @@
   HTTP 429; no PASS was inferred and no experiment result was replaced. Human
   authors still must make the M7 exit decision, complete candidate adjudication
   and second-review coverage, freeze agent metadata, and authorize G2.
+
+## M8-001 - Pilot readiness gate stops at G2 (2026-09-22)
+
+- M8 planning and readiness execution was authorized for the exact pilot shape:
+  six stratified tasks, `B0/B2/B4/CC`, Codex only, two repetitions, and 48
+  scheduled cells. The implementation is recorded in
+  `research/module-reports/M8-2026-09-22-implementation.md` and
+  `research/pilot-report.md`.
+- The gate ran against the current M7 screening manifest and returned the
+  expected fail-closed status (`ready: false`, exit `2`). It found missing
+  manifest/protocol bindings, a non-frozen benchmark, pending/unverified and
+  non-executable tasks, absent source/capsule/gold locks, insufficient
+  language-ecosystem coverage, no adjudication ledger, no frozen agent
+  metadata, no preflight receipt, no G2 authorization, and disabled live mode.
+- No adapter, network call, agent task, run record, raw output, pilot
+  observation, TER/PIP/BSR value, or empirical RQ result was produced. The
+  report is readiness evidence only. Existing M7 HTTP 429 interruptions remain
+  operational history and were not retried into or substituted for an
+  experiment result.
+- The frozen CCS-2.1, execution-plan, and author-approved protocol hashes are
+  unchanged. The human M7 exit, benchmark adjudication, model/version freeze,
+  and G2 authorization remain open. **M9 was not started.**
