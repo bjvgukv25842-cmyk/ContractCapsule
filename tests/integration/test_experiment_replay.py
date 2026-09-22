@@ -503,6 +503,39 @@ def test_run_rejects_external_workspace(tmp_path: Path) -> None:
         )
 
 
+def test_live_workspace_rejects_ignored_files(tmp_path: Path) -> None:
+    workspace, commit = _git_workspace(tmp_path / "workspace")
+    task = _write_task_package(tmp_path / "package", repository_commit=commit)
+    (workspace / ".gitignore").write_text("ignored.txt\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=workspace, check=True)
+    subprocess.run(
+        ["git", "-c", "commit.gpgsign=false", "commit", "-qm", "ignore-rule"],
+        cwd=workspace,
+        check=True,
+    )
+    # Update the task lock to the new immutable checkout commit.
+    current = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=workspace,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    task_yaml = (tmp_path / "package" / "task.yaml").read_text(encoding="utf-8")
+    (tmp_path / "package" / "task.yaml").write_text(
+        task_yaml.replace(commit, current), encoding="utf-8"
+    )
+    task = load_task(tmp_path / "package")
+    (workspace / "ignored.txt").write_text("external influence\n", encoding="utf-8")
+    with pytest.raises(RunRefusal, match="clean"):
+        run_once(
+            task,
+            config=_config(tmp_path / "package"),
+            workspace=workspace,
+            dry_run=False,
+        )
+
+
 def test_run_rejects_cross_task_artifact(tmp_path: Path) -> None:
     task_a = _task(tmp_path / "task-a")
     task_b = _task(tmp_path / "task-b")

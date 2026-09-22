@@ -181,6 +181,7 @@ def _validate_workspace(
             "status",
             "--porcelain=v1",
             "--untracked-files=all",
+            "--ignored=matching",
             "--ignore-submodules=none",
         )
     except UnicodeError as error:
