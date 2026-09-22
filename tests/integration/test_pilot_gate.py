@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -7,7 +8,10 @@ from pydantic import ValidationError
 
 from experiments.pilot import (
     PilotConfig,
+    PilotGateError,
+    PilotGateReport,
     build_pilot_schedule,
+    main,
     validate_pilot_inputs,
 )
 
@@ -99,3 +103,47 @@ def test_schedule_is_deterministic_and_has_48_cells() -> None:
     assert first[-1].task_id == "candidate-006"
     assert first[-1].condition == "CC"
     assert first[-1].repetition == 1
+
+
+def test_checked_in_config_refuses_and_writes_only_readiness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    report_path = tmp_path / "readiness.json"
+    monkeypatch.chdir(tmp_path)
+
+    result = main(
+        [
+            "--config",
+            str(repo_root / "experiments/configs/m8-pilot.yaml"),
+            "--manifest",
+            str(repo_root / "benchmark/benchmark-manifest.json"),
+            "--protocol",
+            str(repo_root / "research/protocol.md"),
+            "--report",
+            str(report_path),
+        ]
+    )
+
+    assert result == 2
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["ready"] is False
+    assert "benchmark_not_frozen" in report["blockers"]
+    assert not (tmp_path / "results/pilot/runs.jsonl").exists()
+
+
+def test_readiness_report_cannot_be_overwritten(tmp_path: Path) -> None:
+    from experiments.pilot import _write_report
+
+    report_path = tmp_path / "readiness.json"
+    report_path.write_text("original\n", encoding="utf-8")
+    report = PilotGateReport(
+        ready=False,
+        task_ids=TASK_IDS,
+        scheduled_runs=48,
+        config_digest="sha256:" + "0" * 64,
+    )
+
+    with pytest.raises(PilotGateError, match="cannot be overwritten"):
+        _write_report(report_path, report)
+    assert report_path.read_text(encoding="utf-8") == "original\n"

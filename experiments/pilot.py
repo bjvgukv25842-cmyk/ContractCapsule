@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 from collections.abc import Mapping
 from pathlib import Path
@@ -64,6 +65,23 @@ class PilotConfig(_PilotModel):
     g2_authorization: str | None = None
     dry_run: bool = True
     live_agent: bool = False
+
+    @field_validator(
+        "manifest_path",
+        "protocol_path",
+        "output_path",
+        "raw_output_dir",
+        "readiness_report_path",
+        "preflight_receipt",
+        mode="before",
+    )
+    @classmethod
+    def _path_fields(cls, value: object) -> Path | None:
+        if value is None:
+            return None
+        if isinstance(value, (str, Path)):
+            return Path(value)
+        raise TypeError("path fields must be strings or paths")
 
     @field_validator("task_ids", mode="before")
     @classmethod
@@ -347,7 +365,25 @@ def _write_report(path: Path, report: PilotGateReport) -> None:
         raise PilotGateError("readiness report cannot be overwritten")
     path.parent.mkdir(parents=True, exist_ok=True)
     encoded = json.dumps(report.model_dump(mode="json"), sort_keys=True, indent=2) + "\n"
-    path.write_text(encoded, encoding="utf-8")
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            descriptor = None
+            output.write(encoded)
+            output.flush()
+            os.fsync(output.fileno())
+    except FileExistsError as error:
+        raise PilotGateError("readiness report cannot be overwritten") from error
+    except OSError as error:
+        raise PilotGateError("readiness report could not be created") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -356,6 +392,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", default=None)
     parser.add_argument("--protocol", default=None)
     parser.add_argument("--report", default=None)
+    parser.add_argument("--check", action="store_true", help="check readiness")
     args = parser.parse_args(argv)
     try:
         config = load_pilot_config(args.config)

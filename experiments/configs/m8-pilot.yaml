@@ -1,0 +1,34 @@
+study_id: m8-pilot-2026-09-22
+agent: codex
+task_ids:
+  - candidate-001
+  - candidate-002
+  - candidate-003
+  - candidate-004
+  - candidate-005
+  - candidate-006
+task_strata:
+  candidate-001: policy
+  candidate-002: api
+  candidate-003: architecture
+  candidate-004: procedure
+  candidate-005: policy
+  candidate-006: api
+conditions: [B0, B2, B4, CC]
+repetitions: 2
+runtime_budget_tokens: 200000
+timeout_seconds: 900
+model: null
+version: null
+binary: null
+manifest_path: benchmark/benchmark-manifest.json
+protocol_path: research/protocol.md
+output_path: results/pilot/runs.jsonl
+raw_output_dir: results/pilot/raw
+readiness_report_path: results/pilot/readiness.json
+preflight_receipt: null
+expected_manifest_digest: null
+expected_protocol_digest: null
+g2_authorization: null
+dry_run: true
+live_agent: false
