@@ -17,6 +17,10 @@ remains open. The 24 records are explicitly screened candidates with
 and no executable gold checks. They are therefore not executable benchmark
 tasks and must not be counted as approved CapsuleBench evidence.
 
+The frozen M7 plan is dated 2026-09-20 and this engineering record is dated
+2026-09-22. The two-day execution variance is recorded here for auditability;
+it does not change the frozen schedule or authorize a later module.
+
 ## Delivered artifacts
 
 - `benchmark/schema.py` and `benchmark/loader.py`: strict frozen models,

@@ -1579,6 +1579,9 @@
   M6 baseline `9b90204`. This correction preserves M7-001 as historical
   evidence and records the follow-up trust-boundary repairs rather than
   rewriting the earlier review history.
+- The frozen M7 plan is dated 2026-09-20 and this verification was completed on
+  2026-09-22. The two-day execution variance is recorded for auditability; no
+  schedule waiver or authorization to begin M8 is inferred.
 - The repaired boundary now requires loader-attested tasks, a digest over every
   immutable package file, exact task/package/repository/budget bindings on
   provider artifacts, a separate clean Git workspace for live execution
