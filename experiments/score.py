@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
@@ -107,6 +109,7 @@ def _command(value: object) -> tuple[str, ...]:
 def _validate_command_paths(command: tuple[str, ...], root: Path) -> None:
     """Reject repository arguments that resolve through symlinks or escape root."""
 
+    root = root.resolve()
     for index, item in enumerate(command):
         if index == 0 and item.startswith("/"):
             if not Path(item).is_file():
@@ -172,6 +175,7 @@ def _declared_command_matches(requested: tuple[str, ...], checks: Mapping[str, t
 
 
 def _check_cwd(check: object, root: Path) -> Path:
+    root = root.resolve()
     raw = _check_attr(check, "cwd", ".")
     if not isinstance(raw, str) or not _safe_relative(raw) and raw != ".":
         raise ScoreError("declared check cwd must be relative")
@@ -196,7 +200,14 @@ def _run(command: tuple[str, ...], cwd: Path, timeout: float) -> tuple[int, byte
             stdin=subprocess.DEVNULL,
             capture_output=True,
             shell=False,
-            env={key: value for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR") if (value := os.environ.get(key)) is not None},
+            env={
+                **{
+                    key: value
+                    for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
+                    if (value := os.environ.get(key)) is not None
+                },
+                "PYTHONDONTWRITEBYTECODE": "1",
+            },
             timeout=timeout,
             check=False,
         )
@@ -273,27 +284,33 @@ def score_task(
     infra = False
     failure_code: str | None = None
     started = time.monotonic()
-    for category, checks in declared.items():
-        for check in checks:
-            argv = _check_command(check)
-            _validate_command_paths(argv, root)
-            check_root = _check_cwd(check, root)
-            raw_check_timeout = _check_attr(check, "timeout_seconds", default_timeout)
-            if not isinstance(raw_check_timeout, (int, float)) or isinstance(raw_check_timeout, bool) or raw_check_timeout <= 0:
-                raise ScoreError("declared check timeout must be positive")
-            check_timeout = float(raw_check_timeout)
-            code, stdout, stderr, failed_infra, code_name = _run(
-                argv, check_root, min(default_timeout, check_timeout)
-            )
-            codes.append(code)
-            output.extend(stdout)
-            errors.extend(stderr)
-            if failed_infra:
-                infra = True
-                failure_code = code_name
-                passed[category].append(False)
-            else:
-                passed[category].append(code == 0)
+    try:
+        with tempfile.TemporaryDirectory(prefix="capsulebench-score-") as temporary:
+            execution_root = Path(temporary) / "task"
+            shutil.copytree(root, execution_root, symlinks=False)
+            for category, checks in declared.items():
+                for check in checks:
+                    argv = _check_command(check)
+                    _validate_command_paths(argv, execution_root)
+                    check_root = _check_cwd(check, execution_root)
+                    raw_check_timeout = _check_attr(check, "timeout_seconds", default_timeout)
+                    if not isinstance(raw_check_timeout, (int, float)) or isinstance(raw_check_timeout, bool) or raw_check_timeout <= 0:
+                        raise ScoreError("declared check timeout must be positive")
+                    check_timeout = float(raw_check_timeout)
+                    code, stdout, stderr, failed_infra, code_name = _run(
+                        argv, check_root, min(default_timeout, check_timeout)
+                    )
+                    codes.append(code)
+                    output.extend(stdout)
+                    errors.extend(stderr)
+                    if failed_infra:
+                        infra = True
+                        failure_code = code_name
+                        passed[category].append(False)
+                    else:
+                        passed[category].append(code == 0)
+    except (OSError, shutil.Error) as error:
+        raise ScoreError("unable to create an isolated scoring workspace") from error
     result = ScoreResult(
         target_passed=(all(passed["target"]) if passed["target"] else None),
         invariant_passed=(all(passed["invariant"]) if passed["invariant"] else None),
