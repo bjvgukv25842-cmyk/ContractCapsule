@@ -37,19 +37,21 @@ recorded in the commit that contains this report.
 
 | Command | Result |
 |---|---|
-| `uv run pytest tests/integration/test_pilot_gate.py -q` | 10 passed |
+| `uv run pytest tests/integration/test_pilot_gate.py -q` | 14 passed |
 | `uv run ruff check experiments/pilot.py tests/integration/test_pilot_gate.py` | passed |
 | `uv run mypy experiments/pilot.py` | passed |
-| `uv run python -m experiments.pilot --config experiments/configs/m8-pilot.yaml --check --report .superpowers/sdd/2026-09-22-m8-pilot-execution/m8-readiness.json` | exit 2, expected fail-closed refusal |
+| `uv run python -m experiments.pilot --config experiments/configs/m8-pilot.yaml --check --report .superpowers/sdd/2026-09-22-m8-pilot-execution/m8-readiness-hardening.json` | exit 2, expected fail-closed refusal |
 | JSON inspection of the readiness report | valid JSON; `ready: false`; 48 scheduled cells |
 | run-output inspection | no `results/pilot/runs.jsonl`; no raw run output |
 
 The M7 residual regression evidence remains the prior exact candidate's
 `1126 passed` full suite plus 53 focused M7 tests and 13 M6 smoke tests. The
-M8 focused gate suite passed 10 tests. The final cumulative regression after
-the governance-ledger correction passed `1136 tests in 314.92s`; the first
-attempt (1135 passed, one ledger-enum failure) is retained as a genuine
-verification failure and was fixed without changing any experiment data.
+The M8 focused gate suite passed 14 tests, including signed-receipt,
+adjudication-JSONL, dangling-output, and stale-raw-output regressions. The
+final cumulative regression after the input-boundary hardening passed
+`1140 tests in 311.11s`. Earlier verification failures (the ledger-enum
+failure and the pre-hardening focused failures) are retained in the task
+history and did not change any experiment data.
 
 ## Research boundary
 

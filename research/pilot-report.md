@@ -76,7 +76,9 @@ pilot_not_enabled
 The report writer uses exclusive creation and refuses to overwrite an existing
 readiness report. The checked-in config has no model, version, or binary and
 sets `dry_run: true` and `live_agent: false`; it cannot be mistaken for pilot
-data.
+data. If a future receipt is supplied, signature verification also requires an
+out-of-tree key via `--preflight-key`; the key is never persisted in the
+repository or printed by the CLI.
 
 ## Required next decision
 
