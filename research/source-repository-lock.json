@@ -1,0 +1,35 @@
+{
+  "schema_version": "1",
+  "project": "ContractCapsule",
+  "canonical_repository": "https://github.com/bjvgukv25842-cmyk/ContractCapsule.git",
+  "web_url": "https://github.com/bjvgukv25842-cmyk/ContractCapsule",
+  "remote_name": "origin",
+  "default_branch": "main",
+  "baseline": {
+    "scope": "M7 engineering substrate and M8 fail-closed readiness gate; no pilot observations",
+    "branch": "codex/m7-capsulebench",
+    "tag": "source-baseline-m8-readiness-v1",
+    "tag_object": "464b61fdf54dacd37cbfe48c060da127dc3b6a1a",
+    "commit": "e3944cb0df21b55ef9b2c1fd62896538198e2536",
+    "tree": "b2b65106e3f34577d8feea899c32067ba0b23074",
+    "subject": "docs(m8): record pilot gate hardening verification",
+    "commit_date": "2026-09-23T13:48:45+08:00"
+  },
+  "publication": {
+    "published_at": "2026-09-24T12:00:54+08:00",
+    "main_commit_at_publication": "e3944cb0df21b55ef9b2c1fd62896538198e2536",
+    "work_branch_commit_at_publication": "e3944cb0df21b55ef9b2c1fd62896538198e2536",
+    "tag_commit": "e3944cb0df21b55ef9b2c1fd62896538198e2536",
+    "verification": [
+      "git ls-remote --symref origin",
+      "GitHub repository API",
+      "GitHub commit API",
+      "GitHub contents API"
+    ]
+  },
+  "boundaries": [
+    "This lock identifies the ContractCapsule project repository, not a CapsuleBench task source.",
+    "CapsuleBench task repositories remain independently reviewed and commit-locked per task.",
+    "The baseline contains no pilot observations and does not authorize G2 or M9."
+  ]
+}

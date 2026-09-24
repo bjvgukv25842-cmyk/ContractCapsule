@@ -1623,3 +1623,32 @@
 - The frozen CCS-2.1, execution-plan, and author-approved protocol hashes are
   unchanged. The human M7 exit, benchmark adjudication, model/version freeze,
   and G2 authorization remain open. **M9 was not started.**
+
+## SRC-001 - Canonical source repository and immutable baseline published (2026-09-24)
+
+- The author designated
+  `https://github.com/bjvgukv25842-cmyk/ContractCapsule` as the canonical
+  ContractCapsule project repository. The configured `origin` already matched
+  its HTTPS clone URL for fetch and push.
+- Historical M0 evidence correctly recorded that the repository was empty and
+  that no push had occurred. A fresh audit confirmed that GitHub still exposed
+  no branch, HEAD, commit, or repository content before this publication.
+- Local commit `e3944cb0df21b55ef9b2c1fd62896538198e2536`, tree
+  `b2b65106e3f34577d8feea899c32067ba0b23074`, was published to remote `main`
+  and `codex/m7-capsulebench`. GitHub's commit and contents APIs independently
+  resolved the published commit and `README.md`.
+- Annotated tag `source-baseline-m8-readiness-v1` points to that exact commit;
+  the full commit hash, not the mutable ref name, is the authoritative lock.
+  `research/source-repository-lock.json` records the repository, commit, tree,
+  tag, publication evidence, and experimental boundary. An offline regression
+  checks that future module work remains descended from the baseline and uses
+  the same `origin`.
+- Repository-local Git credential configuration delegates HTTPS authentication
+  to the already authenticated GitHub CLI keyring. No token was written to a
+  tracked file or printed; a subsequent push dry-run completed successfully.
+- The eight URLs in `benchmark/benchmark-manifest.json` remain external
+  candidate-task repositories. They were deliberately not replaced with the
+  ContractCapsule project URL and still require per-task human review and
+  immutable commit locks.
+- This publication is repository-governance evidence only. It does not approve
+  any benchmark task, authorize G2, create a pilot observation, or start M9.
